@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hanuman Chalisa | Devotional Chant & Audio Sync</title>
+    <meta name="description" content="Chant Shri Hanuman Chalisa with authentic real-time voice sync, accuracy tracking, and streak counter.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23E56A10'><circle cx='12' cy='12' r='10'/></svg>">
+    <!-- Clean Google Fonts (Inter + Noto Serif Devanagari & Bengali) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Inter:wght@300;400;500;600;700&family=Noto+Serif+Devanagari:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Subtle Minimalist Glow Backdrop (Performance Optimized) -->
+    <div class="ambient-glow" aria-hidden="true"></div>
+
+    <!-- Navigation Header -->
+    <header class="app-header">
+        <div class="header-container">
+            <div class="brand">
+                <div class="sacred-symbol" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="9"/>
+                        <path d="M12 7v10M7 12h10"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <span class="brand-title">Shri Hanuman Chalisa</span>
+                    <span class="brand-subtitle">Goswami Tulsidas</span>
+                </div>
+            </div>
+
+            <div class="header-controls">
+                <div class="custom-select-wrap">
+                    <label for="languageSelect" class="sr-only">Script Language</label>
+                    <select id="languageSelect" aria-label="Select Script Language">
+                        <option value="auto">Auto Detect</option>
+                        <option value="en">English (Roman)</option>
+                        <option value="hi">हिन्दी (Devanagari)</option>
+                        <option value="bn">বাংলা (Bengali)</option>
+                    </select>
+                </div>
+
+                <button class="icon-toggle-btn" id="themeToggle" title="Toggle Theme" aria-label="Toggle Theme">
+                    <svg id="themeIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="page-body">
+        <!-- Executive Minimal Metrics Bar -->
+        <section class="metrics-grid" aria-label="Chanting Overview">
+            <div class="metric-tile">
+                <div class="metric-header">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    <span>Total Recitations</span>
+                </div>
+                <div class="metric-val" id="chantCount">0</div>
+            </div>
+
+            <div class="metric-tile">
+                <div class="metric-header">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    <span>Recitation Accuracy</span>
+                </div>
+                <div class="metric-val" id="accuracyScore">—</div>
+            </div>
+
+            <div class="metric-tile metric-interactive" id="progressCard" role="button" tabindex="0" title="Click to navigate through Chaupais">
+                <div class="metric-header">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+                    </svg>
+                    <span>Verse Position</span>
+                </div>
+                <div class="metric-val" id="progressDisplay">Doha 1 / 2</div>
+            </div>
+
+            <div class="metric-tile">
+                <div class="metric-header">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                    </svg>
+                    <span>Current Streak</span>
+                </div>
+                <div class="metric-val" id="streakCount">0 <span class="metric-unit">days</span></div>
+            </div>
+        </section>
+
+        <!-- Primary Control Toolbar -->
+        <section class="action-toolbar">
+            <button class="cta-btn primary-cta" id="startBtn">
+                <svg id="startBtnIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                    <line x1="8" y1="23" x2="16" y2="23"/>
+                </svg>
+                <span id="startBtnText">Begin Chanting</span>
+            </button>
+
+            <button class="cta-btn secondary-cta" id="resetBtn" title="Reset recitation session">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+                </svg>
+                <span>Reset</span>
+            </button>
+        </section>
+
+        <!-- Linear Progress Line -->
+        <div class="linear-progress-wrapper" aria-hidden="true">
+            <div class="linear-progress-fill" id="progressBar"></div>
+        </div>
+
+        <!-- Sacred Reading Sanctuary (Chalisa Lines Display) -->
+        <article class="sanctuary-container" id="sanctuaryContainer">
+            <div class="chalisa-scroll-area" id="chalisaContainer">
+                <!-- Injected efficiently by JS -->
+            </div>
+        </article>
+
+        <!-- Navigation Modal (Clean Elegant Grid) -->
+        <div class="modal-backdrop" id="jumpModal" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-top">
+                    <div>
+                        <h2 class="modal-heading">Navigate Verses</h2>
+                        <p class="modal-caption">Select any Doha or Chaupai to jump directly</p>
+                    </div>
+                    <button class="modal-exit" id="closeJumpModal" aria-label="Close dialog">&times;</button>
+                </div>
+                <div class="nav-grid-scroll" id="jumpGrid">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Completion Modal -->
+        <div class="modal-backdrop" id="completionOverlay" aria-hidden="true">
+            <div class="modal-dialog completion-dialog">
+                <div class="completion-symbol">
+                    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                </div>
+                <h2 class="completion-title">Shri Ram Jai Ram</h2>
+                <p class="completion-desc">Recitation of Shri Hanuman Chalisa completed with devotion.</p>
+                
+                <div class="completion-meta-row">
+                    <div class="meta-item">
+                        <span class="meta-num" id="completionAccuracy">100%</span>
+                        <span class="meta-label">Accuracy</span>
+                    </div>
+                    <div class="meta-item">
+                        <span class="meta-num" id="completionCount">1</span>
+                        <span class="meta-label">Total Recitations</span>
+                    </div>
+                </div>
+
+                <div class="completion-actions">
+                    <button class="cta-btn primary-cta" id="chantAgainBtn">Recite Once More</button>
+                    <button class="cta-btn secondary-cta" id="closeCompletionBtn">Close</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Professional Bottom HUD Transcript -->
+    <footer class="live-hud-panel" id="transcriptPanel">
+        <div class="hud-bar">
+            <div class="hud-status">
+                <span class="pulse-indicator" id="micDot"></span>
+                <span class="status-caption" id="micLabel">Microphone Inactive</span>
+            </div>
+            <button class="hud-toggle-btn" id="transcriptToggle" aria-label="Toggle transcript panel">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </button>
+        </div>
+        <div class="hud-feed" id="transcriptBody">
+            <p class="hud-text" id="transcriptText">Click "Begin Chanting" and start reciting anytime...</p>
+        </div>
+    </footer>
+
+    <!-- Browser Compatibility Notice -->
+    <div class="compatibility-notice" id="browserWarning" style="display:none;">
+        <p>Your browser does not support live speech recognition. For full audio sync, please use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong>.</p>
+        <button class="btn-text-dismiss" id="dismissWarning">Dismiss</button>
+    </div>
+
+    <!-- Application Code -->
+    <script src="js/chalisa-data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
