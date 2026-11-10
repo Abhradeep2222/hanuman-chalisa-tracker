@@ -1,6 +1,7 @@
 /* ==========================================================================
-   Shri Hanuman Chalisa - Divine Temple Aesthetic & Kara-Sync
-   Theme: Sacred Saffron, Obsidian Midnight & Divine Gold
+   Shri Hanuman Chalisa - World-Class Devotional Experience
+   Theme: Sacred Temple Obsidian, Saffron Amber & Royal Gold
+   Engineered for 100% responsiveness on Mobile, Tablet & Desktop
    ========================================================================== */
 
 :root {
@@ -16,8 +17,8 @@
   --bg-card: #11131B;
   --bg-card-hover: #171A24;
   --bg-elevated: #151822;
-  --border-glass: rgba(255, 255, 255, 0.07);
-  --border-gold: rgba(245, 158, 11, 0.35);
+  --border-glass: rgba(255, 255, 255, 0.08);
+  --border-gold: rgba(245, 158, 11, 0.4);
 
   --text-pure: #FFFFFF;
   --text-muted: #94A3B8;
@@ -25,12 +26,12 @@
 
   /* Live Kara-Chant Colors */
   --kara-green: #10B981;
-  --kara-green-glow: 0 0 16px rgba(16, 185, 129, 0.7);
-  --kara-active-bg: rgba(16, 185, 129, 0.15);
+  --kara-green-glow: 0 0 14px rgba(16, 185, 129, 0.7);
+  --kara-active-bg: rgba(16, 185, 129, 0.16);
 
-  /* Typography */
+  /* Fonts */
   --font-serif: 'Cinzel', serif;
-  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-dev: 'Noto Serif Devanagari', serif;
   --font-bn: 'Noto Serif Bengali', serif;
   --line-font-size: 17px;
@@ -41,8 +42,8 @@
   --bg-card: #FFFFFF;
   --bg-card-hover: #FDF7ED;
   --bg-elevated: #F7EFE2;
-  --border-glass: rgba(0, 0, 0, 0.07);
-  --border-gold: rgba(217, 119, 6, 0.35);
+  --border-glass: rgba(0, 0, 0, 0.08);
+  --border-gold: rgba(217, 119, 6, 0.4);
   --text-pure: #1E293B;
   --text-muted: #475569;
   --text-dim: #94A3B8;
@@ -67,7 +68,7 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ==================== Header ==================== */
+/* ==================== 1. Compact Header Bar ==================== */
 
 .temple-header {
   position: sticky;
@@ -75,15 +76,15 @@ body {
   left: 0;
   right: 0;
   z-index: 100;
-  background: rgba(8, 9, 13, 0.94);
+  background: rgba(8, 9, 13, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-glass);
-  padding: 10px 16px;
+  padding: 8px 14px;
 }
 
 [data-theme="light"] .temple-header {
-  background: rgba(255, 251, 245, 0.94);
+  background: rgba(255, 251, 245, 0.95);
 }
 
 .header-inner {
@@ -92,91 +93,80 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .brand-wrapper {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .sacred-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   background: var(--saffron-gradient);
   color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.4);
   flex-shrink: 0;
+}
+
+.title-group {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .title-group h1 {
   font-family: var(--font-serif);
-  font-size: 15.5px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--gold-primary);
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .title-group p {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-right {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
-.pill-btn {
+.icon-pill-btn {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
   color: var(--text-pure);
   font-size: 12px;
-  font-weight: 600;
-  padding: 5px 10px;
+  font-weight: 700;
+  padding: 6px 10px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
+  height: 32px;
 }
 
-.pill-btn.active, .pill-btn:hover {
+.icon-pill-btn.active, .icon-pill-btn:hover {
   border-color: var(--gold-primary);
-  color: var(--gold-primary);
-}
-
-.font-size-group {
-  display: flex;
-  align-items: center;
-  background: var(--bg-card);
-  border: 1px solid var(--border-glass);
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.font-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-pure);
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 5px 8px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.font-btn:hover {
-  background: var(--bg-elevated);
   color: var(--gold-primary);
 }
 
@@ -184,83 +174,63 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
   color: var(--text-pure);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 5px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 0 8px;
+  height: 32px;
   border-radius: 8px;
   outline: none;
   cursor: pointer;
-  transition: border-color 0.2s ease;
 }
 
 .lang-dropdown:focus {
   border-color: var(--gold-primary);
 }
 
-.theme-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-glass);
-  color: var(--gold-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.theme-btn:hover {
-  border-color: var(--gold-primary);
-  box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
-}
-
-/* ==================== Main Content ==================== */
+/* ==================== 2. Main Page Layout ==================== */
 
 .main-wrapper {
   max-width: 960px;
-  margin: 14px auto 0;
-  padding: 0 14px 130px;
+  margin: 10px auto 0;
+  padding: 0 12px 130px;
 }
 
-/* ---------- Sankalpa Mala Goal Bar ---------- */
+/* ---------- Sankalpa Goal Bar ---------- */
 
 .sankalpa-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
-  border-radius: 12px;
-  padding: 8px 14px;
-  margin-bottom: 12px;
+  border-radius: 10px;
+  padding: 7px 12px;
+  margin-bottom: 10px;
 }
 
-.sankalpa-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  font-weight: 600;
+.sankalpa-title {
+  font-size: 12px;
+  font-weight: 700;
   color: var(--gold-primary);
+  white-space: nowrap;
 }
 
-.sankalpa-options {
+.sankalpa-pills {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .target-btn {
   background: var(--bg-elevated);
   border: 1px solid var(--border-glass);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 4px 9px;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -284,15 +254,15 @@ body {
 .stats-container {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .stat-box {
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
-  border-radius: 12px;
-  padding: 10px 14px;
+  border-radius: 10px;
+  padding: 9px 12px;
   transition: transform 0.2s ease, border-color 0.2s ease;
 }
 
@@ -308,9 +278,9 @@ body {
 .stat-title {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 600;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -318,10 +288,10 @@ body {
 
 .stat-number {
   font-family: var(--font-serif);
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-pure);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .stat-number.accuracy-val {
@@ -330,7 +300,7 @@ body {
 }
 
 .stat-sub {
-  font-size: 10.5px;
+  font-size: 10px;
   color: var(--text-dim);
   font-weight: 600;
   margin-top: 1px;
@@ -341,28 +311,29 @@ body {
 .badge-sadhak { color: #3B82F6; }
 .badge-abhyas { color: #94A3B8; }
 
-/* ---------- Multi-Engine Controls Deck ---------- */
+/* ---------- Multi-Engine Action Toolbar ---------- */
 
 .controls-deck {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--border-glass);
-  border-radius: 10px;
-  padding: 10px 16px;
-  font-size: 13.5px;
+  border-radius: 9px;
+  padding: 9px 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
+  height: 42px;
 }
 
 .btn-voice {
@@ -370,29 +341,29 @@ body {
   background: var(--saffron-gradient);
   color: #FFFFFF;
   border-color: var(--gold-primary);
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+  box-shadow: 0 3px 12px rgba(245, 158, 11, 0.35);
 }
 
 .btn-voice:hover {
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.5);
   transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(245, 158, 11, 0.5);
 }
 
 .btn-voice.listening {
   background: linear-gradient(135deg, #EF4444 0%, #B91C1C 100%);
   border-color: #EF4444;
-  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
-  animation: pulseMic 1.5s infinite;
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.6);
+  animation: pulseBtn 1.5s infinite;
 }
 
-@keyframes pulseMic {
+@keyframes pulseBtn {
   0% { transform: scale(1); }
   50% { transform: scale(1.02); }
   100% { transform: scale(1); }
 }
 
 .btn-auto {
-  flex: 1 1 140px;
+  flex: 1 1 130px;
   background: var(--bg-card);
   color: var(--text-pure);
 }
@@ -404,7 +375,7 @@ body {
 }
 
 .btn-tap {
-  flex: 1 1 120px;
+  flex: 1 1 110px;
   background: var(--bg-card);
   color: var(--text-pure);
 }
@@ -415,34 +386,12 @@ body {
   border-color: var(--kara-green);
 }
 
-.speed-toggle {
-  display: flex;
-  background: var(--bg-card);
-  border: 1px solid var(--border-glass);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.speed-pill {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 8px 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.speed-pill.active {
-  background: var(--bg-elevated);
-  color: var(--gold-primary);
-}
-
 .btn-reset {
   background: var(--bg-card);
   color: var(--text-muted);
-  padding: 10px 14px;
+  width: 42px;
+  padding: 0;
+  flex-shrink: 0;
 }
 
 .btn-reset:hover {
@@ -450,15 +399,15 @@ body {
   border-color: var(--border-gold);
 }
 
-/* ---------- Progress Line ---------- */
+/* ---------- Progress Line Bar ---------- */
 
 .progress-line-wrap {
   width: 100%;
-  height: 4px;
+  height: 3px;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .progress-fill {
@@ -468,27 +417,27 @@ body {
   transition: width 0.3s ease;
 }
 
-/* ==================== Chalisa Verses Sanctuary ==================== */
+/* ==================== 3. Verses Sanctuary ==================== */
 
 .chalisa-sanctuary {
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
   overflow: hidden;
 }
 
 .verses-scroll {
-  padding: 20px 18px;
-  max-height: 58vh;
+  padding: 16px 14px;
+  max-height: 56vh;
   overflow-y: auto;
   scroll-behavior: smooth;
 }
 
 /* Verse Card Container */
 .verse-card {
-  margin-bottom: 22px;
-  padding-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
   border-bottom: 1px dashed var(--border-glass);
 }
 
@@ -499,19 +448,19 @@ body {
 }
 
 .verse-header {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .verse-tag {
   display: inline-block;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--gold-primary);
   background: var(--saffron-subtle);
   border: 1px solid var(--border-gold);
-  padding: 3px 10px;
+  padding: 2px 9px;
   border-radius: 20px;
 }
 
@@ -520,18 +469,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px;
+  padding: 8px 10px;
   border-radius: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
   border-left: 3px solid transparent;
 }
 
 .chalisa-line-row.current {
   background: rgba(245, 158, 11, 0.09);
   border-left-color: var(--gold-primary);
-  box-shadow: inset 0 0 20px rgba(245, 158, 11, 0.05);
+  box-shadow: inset 0 0 18px rgba(245, 158, 11, 0.05);
 }
 
 .chalisa-line-row.matched {
@@ -549,7 +498,7 @@ body {
 
 .line-content {
   font-size: var(--line-font-size);
-  line-height: 1.7;
+  line-height: 1.65;
   font-weight: 500;
   color: var(--text-pure);
   flex: 1;
@@ -557,14 +506,12 @@ body {
 
 .line-content.devanagari {
   font-family: var(--font-dev);
-  font-size: calc(var(--line-font-size) + 1.5px);
-  letter-spacing: 0.3px;
+  font-size: calc(var(--line-font-size) + 1px);
 }
 
 .line-content.bengali {
   font-family: var(--font-bn);
-  font-size: calc(var(--line-font-size) + 1.5px);
-  letter-spacing: 0.3px;
+  font-size: calc(var(--line-font-size) + 1px);
 }
 
 /* Word Units with Live Glowing Highlight */
@@ -572,8 +519,7 @@ body {
   display: inline-block;
   padding: 1px 3px;
   border-radius: 4px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
+  transition: color 0.15s ease, background 0.15s ease, text-shadow 0.15s ease;
 }
 
 .word-unit.chanted {
@@ -581,21 +527,20 @@ body {
   font-weight: 700;
   text-shadow: var(--kara-green-glow);
   background: var(--kara-active-bg);
-  transform: scale(1.02);
 }
 
 .chalisa-line-row.current .word-unit:not(.chanted):first-of-type {
   text-decoration: underline 2px var(--gold-primary);
-  text-underline-offset: 4px;
+  text-underline-offset: 3px;
 }
 
 .line-status-chip {
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--text-dim);
   padding: 2px 6px;
-  border-radius: 6px;
-  margin-left: 10px;
+  border-radius: 5px;
+  margin-left: 8px;
   white-space: nowrap;
 }
 
@@ -606,15 +551,14 @@ body {
 
 /* Verse Meaning (Bhavarth) Card */
 .verse-meaning {
-  margin-top: 10px;
-  padding: 10px 14px;
+  margin-top: 8px;
+  padding: 9px 12px;
   background: var(--bg-elevated);
   border-left: 2px solid var(--gold-primary);
   border-radius: 0 8px 8px 0;
-  font-size: 12.5px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.55;
   color: var(--text-muted);
-  animation: fadeIn 0.2s ease;
 }
 
 .verse-meaning .meaning-hi {
@@ -627,12 +571,7 @@ body {
   font-style: italic;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ==================== Floating HUD with Live Audio Visualizer ==================== */
+/* ==================== 4. Floating HUD ==================== */
 
 .floating-hud {
   position: fixed;
@@ -640,15 +579,15 @@ body {
   left: 0;
   right: 0;
   z-index: 90;
-  background: rgba(8, 9, 13, 0.95);
+  background: rgba(8, 9, 13, 0.96);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--border-glass);
-  padding: 10px 16px env(safe-area-inset-bottom, 10px);
+  padding: 9px 14px max(9px, env(safe-area-inset-bottom));
 }
 
 [data-theme="light"] .floating-hud {
-  background: rgba(255, 251, 245, 0.95);
+  background: rgba(255, 251, 245, 0.96);
 }
 
 .hud-content {
@@ -657,19 +596,19 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
 
 .hud-mic-state {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .pulse-led {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-dim);
   transition: all 0.3s ease;
@@ -677,34 +616,33 @@ body {
 
 .pulse-led.live {
   background: #EF4444;
-  box-shadow: 0 0 10px #EF4444;
+  box-shadow: 0 0 8px #EF4444;
   animation: blinkLed 1s infinite;
 }
 
 @keyframes blinkLed {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.3; }
 }
 
 .hud-status-text {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--gold-primary);
   white-space: nowrap;
 }
 
-/* Real-Time Audio Equalizer Bars */
 .audio-equalizer {
   display: flex;
   align-items: flex-end;
   gap: 2px;
-  height: 18px;
-  margin-left: 4px;
+  height: 16px;
+  margin-left: 2px;
 }
 
 .eq-bar {
   width: 3px;
-  height: 4px;
+  height: 3px;
   background: var(--gold-primary);
   border-radius: 2px;
   transition: height 0.08s ease;
@@ -715,8 +653,8 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-glass);
   border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 12px;
+  padding: 5px 12px;
+  font-size: 11.5px;
   color: var(--text-pure);
   font-style: italic;
   white-space: nowrap;
@@ -725,12 +663,12 @@ body {
   text-align: right;
 }
 
-/* ==================== Modals & Overlays ==================== */
+/* ==================== 5. Modals & Drawers ==================== */
 
 .dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   z-index: 200;
@@ -747,29 +685,23 @@ body {
 .dialog-card {
   background: var(--bg-card);
   border: 1px solid var(--border-gold);
-  border-radius: 16px;
-  max-width: 480px;
+  border-radius: 14px;
+  max-width: 460px;
   width: 100%;
-  padding: 20px;
+  padding: 18px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  animation: modalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes modalScale {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
 }
 
 .dialog-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 
 .dialog-top h2 {
   font-family: var(--font-serif);
-  font-size: 16px;
+  font-size: 15.5px;
   color: var(--gold-primary);
 }
 
@@ -783,19 +715,19 @@ body {
 
 .dialog-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
   gap: 6px;
   overflow-y: auto;
-  max-height: 55vh;
+  max-height: 52vh;
 }
 
 .verse-jump-btn {
-  padding: 8px 6px;
-  border-radius: 8px;
+  padding: 7px 5px;
+  border-radius: 7px;
   border: 1px solid var(--border-glass);
   background: var(--bg-elevated);
   color: var(--text-pure);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
@@ -812,55 +744,197 @@ body {
   border-color: var(--gold-primary);
 }
 
+/* Settings Card */
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.setting-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.setting-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.setting-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-pure);
+}
+
+.setting-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.font-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.font-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-glass);
+  color: var(--text-pure);
+  font-size: 12px;
+  font-weight: 700;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.font-size-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-primary);
+  min-width: 34px;
+  text-align: center;
+}
+
+.theme-switch-btn {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-glass);
+  color: var(--text-pure);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.speed-toggle {
+  display: flex;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.speed-pill {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 9px;
+  cursor: pointer;
+}
+
+.speed-pill.active {
+  background: var(--saffron-gradient);
+  color: #FFFFFF;
+}
+
+/* Switch Toggle */
+.switch-toggle {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.switch-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border-glass);
+  transition: .3s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: var(--gold-primary);
+  border-color: var(--gold-primary);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
 /* Completion Card */
 .completion-card {
   text-align: center;
-  max-width: 420px;
-  padding: 30px 20px;
+  max-width: 400px;
+  padding: 26px 18px;
 }
 
 .divine-star {
-  font-size: 38px;
-  margin-bottom: 8px;
+  font-size: 34px;
+  margin-bottom: 6px;
 }
 
 .divine-heading {
   font-family: var(--font-serif);
-  font-size: 24px;
+  font-size: 22px;
   color: var(--gold-primary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .divine-sub {
   color: var(--text-muted);
-  font-size: 13.5px;
-  margin-bottom: 20px;
+  font-size: 13px;
+  margin-bottom: 18px;
 }
 
 .completion-metrics {
   display: flex;
   justify-content: center;
-  gap: 32px;
-  margin-bottom: 20px;
+  gap: 28px;
+  margin-bottom: 18px;
 }
 
 .metric-num-highlight {
   font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--kara-green);
-  text-shadow: 0 0 12px rgba(16, 185, 129, 0.4);
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
 .metric-num-gold {
   font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 800;
   color: var(--gold-primary);
 }
 
 .metric-label {
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   color: var(--text-dim);
   font-weight: 700;
@@ -870,11 +944,11 @@ body {
   background: var(--bg-elevated);
   border: 1px solid var(--border-gold);
   border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 9px 12px;
+  font-size: 12.5px;
   color: var(--gold-primary);
   font-weight: 600;
-  margin-bottom: 22px;
+  margin-bottom: 20px;
 }
 
 .completion-actions {
@@ -883,7 +957,7 @@ body {
   justify-content: center;
 }
 
-/* ==================== Responsive Media Queries ==================== */
+/* ==================== 6. Responsive Queries ==================== */
 
 @media (max-width: 768px) {
   .stats-container {
@@ -891,36 +965,40 @@ body {
   }
 }
 
-@media (max-width: 520px) {
+@media (max-width: 480px) {
   .temple-header {
-    padding: 8px 12px;
+    padding: 7px 10px;
   }
   .title-group p {
     display: none;
   }
+  .brand-wrapper {
+    gap: 6px;
+  }
   .main-wrapper {
-    padding: 0 10px 125px;
-    margin-top: 10px;
+    padding: 0 8px 125px;
+    margin-top: 8px;
   }
   .sankalpa-bar {
-    padding: 6px 10px;
+    padding: 5px 8px;
   }
   .stats-container {
     grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    gap: 6px;
   }
   .stat-box {
     padding: 8px 10px;
   }
   .stat-number {
-    font-size: 17px;
+    font-size: 16px;
   }
   .controls-deck {
-    gap: 6px;
+    gap: 5px;
   }
   .action-btn {
-    padding: 9px 12px;
+    padding: 8px 10px;
     font-size: 12px;
+    height: 40px;
   }
   .btn-voice {
     flex: 1 1 100%;
@@ -931,21 +1009,21 @@ body {
   .btn-tap {
     flex: 1 1 48%;
   }
-  .speed-toggle {
-    flex: 1 1 auto;
+  .btn-reset {
+    flex: 0 0 40px;
   }
   .verses-scroll {
-    padding: 16px 10px;
+    padding: 14px 10px;
     max-height: 52vh;
   }
   .chalisa-line-row {
-    padding: 8px 10px;
+    padding: 7px 8px;
   }
   .hud-content {
-    gap: 8px;
+    gap: 6px;
   }
   .hud-feed-pill {
     font-size: 11px;
-    padding: 5px 10px;
+    padding: 4px 8px;
   }
 }

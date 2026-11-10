@@ -835,52 +835,56 @@ const CHALISA_DATA = {
  * Phonetic transliterator: Converts Devanagari or Bengali to Latin approximation
  */
 const SCRIPT_TO_LATIN = {
-  'অ':'a','আ':'a','ই':'i','ঈ':'i','উ':'u','ঊ':'u','ঋ':'ri','এ':'e','ঐ':'ai','ও':'o','ঔ':'au',
-  'ক':'k','খ':'kh','গ':'g','घ':'gh','ঙ':'ng',
-  'চ':'ch','ছ':'chh','জ':'j','ঝ':'jh','ঞ':'n',
-  'ট':'t','ঠ':'th','ড':'d','ঢ':'dh','ণ':'n',
-  'ত':'t','थ':'th','দ':'d','ध':'dh','ন':'n',
-  'প':'p','ফ':'ph','ব':'b','ভ':'bh','ম':'m',
-  'য':'y','র':'r','ল':'l','শ':'sh','ष':'sh','স':'s','হ':'h',
-  'ড়':'r','ঢ়':'rh','য়':'y','ৎ':'t','ং':'ng','ঃ':'h','ঁ':'n',
-  'া':'a','ি':'i','ী':'i','ু':'u','ূ':'u','ৃ':'ri','ে':'e','ৈ':'ai','ো':'o','ৌ':'au','্':'',
-  // Devanagari
   'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ऋ':'ri','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
-  'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'ng',
-  'च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n',
-  'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n',
-  'त':'t','थ':'th','द':'d','ध':'dh','न':'n',
-  'प':'p','फ':'ph','ब':'b','भ':'bh','म':'m',
-  'य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h',
+  'क':'k','ख':'k','ग':'g','घ':'g','ङ':'n',
+  'च':'ch','छ':'ch','ज':'j','झ':'j','ञ':'n',
+  'ट':'t','ठ':'t','ड':'d','ढ':'d','ण':'n',
+  'त':'t','थ':'t','द':'d','ध':'d','न':'n',
+  'प':'p','फ':'p','ब':'b','भ':'b','म':'m',
+  'य':'j','र':'r','ल':'l','व':'b','श':'s','ष':'s','स':'s','ह':'h',
   'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','ृ':'ri','े':'e','ै':'ai','ो':'o','ौ':'au','्':'',
-  'ं':'n','ः':'h','ँ':'n','़':''
+  'ं':'n','ः':'h','ँ':'n','़':'',
+  // Bengali
+  'অ':'a','আ':'a','ই':'i','ঈ':'i','উ':'u','ঊ':'u','ঋ':'ri','এ':'e','ঐ':'ai','ও':'o','ঔ':'au',
+  'ক':'k','খ':'k','গ':'g','ঘ':'g','ঙ':'n',
+  'চ':'ch','ছ':'ch','জ':'j','ঝ':'j','ঞ':'n',
+  'ট':'t','ঠ':'t','ড':'d','ঢ':'d','ণ':'n',
+  'ত':'t','থ':'t','দ':'d','ধ':'d','ন':'n',
+  'প':'p','ফ':'p','ব':'b','ভ':'b','ম':'m',
+  'য':'j','র':'r','ল':'l','শ':'s','ষ':'s','স':'s','হ':'h',
+  'ড়':'r','ঢ়':'r','য়':'j','ৎ':'t','ং':'n','ঃ':'h','ঁ':'n',
+  'া':'a','ি':'i','ী':'i','ু':'u','ূ':'u','ৃ':'ri','ে':'e','ৈ':'ai','ো':'o','ৌ':'au','্':''
 };
 
 function scriptToPhonetic(str) {
   if (!str) return '';
   let out = '';
-  for (let ch of str) {
+  for (let ch of str.toLowerCase()) {
     out += SCRIPT_TO_LATIN[ch] !== undefined ? SCRIPT_TO_LATIN[ch] : ch;
   }
-  return out.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return out.replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Phonetic skeleton with Awadhi-to-Modern-Hindi mapping & sound normalization
+ * Collapses v/b, sh/s, y/j, retroflexes, vowels and duplicate consonants
+ */
 function phoneticSkeleton(str) {
   if (!str) return '';
   let s = scriptToPhonetic(str);
-  s = s.replace(/sh/g, 's')
-       .replace(/chh/g, 'ch')
-       .replace(/kh/g, 'k')
-       .replace(/gh/g, 'g')
+  s = s.replace(/[vw]/g, 'b')
+       .replace(/sh/g, 's')
+       .replace(/y/g, 'j')
+       .replace(/ph/g, 'p')
        .replace(/bh/g, 'b')
        .replace(/dh/g, 'd')
        .replace(/th/g, 't')
-       .replace(/ph/g, 'p')
-       .replace(/v/g, 'b')
-       .replace(/w/g, 'b')
+       .replace(/kh/g, 'k')
+       .replace(/gh/g, 'g')
        .replace(/jn/g, 'gn')
-       .replace(/gy/g, 'gn');
-  const noVowels = s.replace(/[aeiouy]/g, '').replace(/(.)+/g, '');
+       .replace(/gy/g, 'gn')
+       .replace(/ch+/g, 'ch');
+  const noVowels = s.replace(/[aeiou]/g, '').replace(/(.)\1+/g, '$1');
   return noVowels.length >= 2 ? noVowels : s;
 }
 

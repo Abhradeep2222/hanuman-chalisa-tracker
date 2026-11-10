@@ -2,108 +2,93 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Shri Hanuman Chalisa | AI Voice Sync & Devotional Chanting</title>
-    <meta name="description" content="Chant Shri Hanuman Chalisa with real-time AI speech synchronization, word-by-word karaoke glow, pronunciation accuracy scoring, and authentic meanings.">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Shri Hanuman Chalisa | AI Voice Chanting & Accuracy Tracker</title>
+    <meta name="description" content="Authentic Shri Hanuman Chalisa with real-time AI speech recognition, word-by-word karaoke glow, pronunciation accuracy score, and meanings.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F59E0B'><circle cx='12' cy='12' r='10'/></svg>">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&family=Noto+Serif+Devanagari:wght@500;600;700&family=Noto+Serif+Bengali:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=2.0">
+    <link rel="stylesheet" href="style.css?v=3.0">
 </head>
 <body>
 
-    <!-- Sacred Header Bar -->
+    <!-- Sacred Top Bar -->
     <header class="temple-header">
         <div class="header-inner">
             <div class="brand-wrapper">
                 <div class="sacred-icon" title="Shri Hanuman Yantra">
-                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z"/>
                     </svg>
                 </div>
                 <div class="title-group">
                     <h1>Shri Hanuman Chalisa</h1>
-                    <p>Goswami Tulsidas • Divine Kara-Sync</p>
+                    <p>Goswami Tulsidas</p>
                 </div>
             </div>
 
             <div class="header-right">
                 <!-- Meaning Toggle -->
-                <button class="pill-btn" id="toggleMeaningBtn" title="Toggle Hindi & English Meaning">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-                    </svg>
+                <button class="icon-pill-btn active" id="toggleMeaningBtn" title="Toggle Meanings (अर्थ)">
                     <span>अर्थ</span>
                 </button>
 
-                <!-- Font Size Controller -->
-                <div class="font-size-group">
-                    <button class="font-btn" id="fontDecBtn" title="Decrease Font">A-</button>
-                    <button class="font-btn" id="fontIncBtn" title="Increase Font">A+</button>
-                </div>
-
-                <!-- Language Dropdown -->
+                <!-- Language Selector -->
                 <select id="languageSelect" class="lang-dropdown" aria-label="Script Language">
-                    <option value="auto">Auto Detect</option>
-                    <option value="en">English (Roman)</option>
-                    <option value="hi">हिन्दी (Devanagari)</option>
-                    <option value="bn">বাংলা (Bengali)</option>
+                    <option value="auto">Auto (EN)</option>
+                    <option value="en">English</option>
+                    <option value="hi">हिन्दी</option>
+                    <option value="bn">বাংলা</option>
                 </select>
 
-                <!-- Theme Toggle -->
-                <button class="theme-btn" id="themeToggle" title="Toggle Theme" aria-label="Toggle Dark/Light Theme">
-                    <svg id="themeIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="5"/>
-                        <line x1="12" y1="1" x2="12" y2="3"/>
-                        <line x1="12" y1="21" x2="12" y2="23"/>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                        <line x1="1" y1="12" x2="3" y2="12"/>
-                        <line x1="21" y1="12" x2="23" y2="12"/>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                <!-- Settings Drawer Trigger -->
+                <button class="icon-pill-btn" id="openSettingsBtn" title="Preferences (Font Size & Theme)">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>
                 </button>
             </div>
         </div>
     </header>
 
-    <!-- Main Container -->
+    <!-- Main Body -->
     <main class="main-wrapper">
-        <!-- Sankalpa / Target Mala Goal Bar -->
-        <section class="sankalpa-bar" aria-label="Sankalpa Goal">
-            <div class="sankalpa-label">
-                <span class="bead-icon">📿</span>
-                <span>Sankalpa Goal:</span>
+        <!-- Sankalpa Goal Bar -->
+        <section class="sankalpa-bar" aria-label="Sankalpa Mala Target">
+            <div class="sankalpa-title">
+                <span>📿 Sankalpa:</span>
             </div>
-            <div class="sankalpa-options">
+            <div class="sankalpa-pills">
                 <button class="target-btn active" data-target="1">1x</button>
                 <button class="target-btn" data-target="7">7x</button>
                 <button class="target-btn" data-target="11">11x</button>
                 <button class="target-btn" data-target="21">21x</button>
-                <button class="target-btn" data-target="108">108x (Mala)</button>
+                <button class="target-btn" data-target="108">108x</button>
             </div>
         </section>
 
         <!-- Stats Dashboard -->
-        <section class="stats-container" aria-label="Chanting Progress">
+        <section class="stats-container" aria-label="Chanting Progress Dashboard">
+            <!-- 1. Recitations -->
             <div class="stat-box">
                 <div class="stat-title">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
                     </svg>
                     <span>Recitations</span>
                 </div>
                 <div class="stat-number" id="chantCount">0</div>
-                <div class="stat-sub" id="targetSub">Goal: 1</div>
+                <div class="stat-sub" id="targetSub">Goal: 1x</div>
             </div>
 
+            <!-- 2. Accuracy -->
             <div class="stat-box">
                 <div class="stat-title">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
                     </svg>
                     <span>Accuracy</span>
@@ -112,92 +97,146 @@
                 <div class="stat-sub badge-divya" id="accuracyBadge">Divya 🌟</div>
             </div>
 
-            <div class="stat-box clickable" id="progressCard" role="button" tabindex="0" title="Click to open Verse Jump Navigator">
+            <!-- 3. Verse Position -->
+            <div class="stat-box clickable" id="progressCard" role="button" tabindex="0" title="Click to open Navigator">
                 <div class="stat-title">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
                     </svg>
                     <span>Position</span>
                 </div>
                 <div class="stat-number" id="progressDisplay">Doha 1 / 2</div>
-                <div class="stat-sub">Tap to Jump ↗</div>
+                <div class="stat-sub">Jump ↗</div>
             </div>
 
+            <!-- 4. Daily Streak -->
             <div class="stat-box">
                 <div class="stat-title">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                     </svg>
                     <span>Streak</span>
                 </div>
                 <div class="stat-number" id="streakCount">0 d</div>
-                <div class="stat-sub">Daily Path</div>
+                <div class="stat-sub">Daily Path 🔥</div>
             </div>
         </section>
 
-        <!-- Multi-Engine Controls Deck -->
+        <!-- Multi-Engine Controls Toolbar -->
         <section class="controls-deck">
-            <!-- 1. Voice Recognition Button with Pulse -->
-            <button class="action-btn btn-voice" id="startBtn" title="Start AI Voice Recognition & Real-time word highlight">
-                <div class="btn-icon-wrap">
-                    <svg id="startBtnIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                        <line x1="12" y1="19" x2="12" y2="23"/>
-                    </svg>
-                </div>
+            <!-- 1. Voice Recognition Button -->
+            <button class="action-btn btn-voice" id="startBtn" title="Start AI Voice Recognition">
+                <svg id="startBtnIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                    <line x1="12" y1="19" x2="12" y2="23"/>
+                </svg>
                 <span id="startBtnText">AI Voice Sync</span>
             </button>
 
-            <!-- 2. Devotional Audio Recitation Mode -->
-            <button class="action-btn btn-auto" id="aiAutoChantBtn" title="Play Chanting with real-time word-by-word karaoke glow">
+            <!-- 2. Devotional Audio Player -->
+            <button class="action-btn btn-auto" id="aiAutoChantBtn" title="Listen & Learn Chanting">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <polygon points="5 3 19 12 5 21 5 3"/>
                 </svg>
                 <span id="aiAutoChantText">Listen & Learn</span>
             </button>
 
-            <!-- 3. Tap-to-Chant (Zero Lag Touch / Mala Sync) -->
-            <button class="action-btn btn-tap" id="tapSyncBtn" title="Tap or press Space to advance word-by-word">
+            <!-- 3. Tap to Sync -->
+            <button class="action-btn btn-tap" id="tapSyncBtn" title="Tap to Advance Word">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="9 18 15 12 9 6"/>
                 </svg>
                 <span>Tap Sync</span>
             </button>
 
-            <!-- Speed Selector Pill -->
-            <div class="speed-toggle" id="speedToggle" title="Audio Recitation Pace">
-                <button class="speed-pill" data-speed="0.75">0.75x</button>
-                <button class="speed-pill active" data-speed="1.0">1.0x</button>
-                <button class="speed-pill" data-speed="1.25">1.25x</button>
-            </div>
-
-            <!-- Reset Button -->
-            <button class="action-btn btn-reset" id="resetBtn" title="Reset Chanting Session">
+            <!-- 4. Reset Button -->
+            <button class="action-btn btn-reset" id="resetBtn" title="Reset Session">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                     <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
                 </svg>
             </button>
         </section>
 
-        <!-- Progress Bar Indicator -->
+        <!-- Progress Line Bar -->
         <div class="progress-line-wrap" aria-hidden="true">
             <div class="progress-fill" id="progressBar"></div>
         </div>
 
-        <!-- Chalisa Verses Sanctuary -->
+        <!-- Verses Sanctuary -->
         <article class="chalisa-sanctuary">
             <div class="verses-scroll" id="chalisaContainer">
-                <!-- Rendered dynamically by JavaScript -->
+                <!-- Rendered dynamically -->
             </div>
         </article>
+
+        <!-- Settings Modal Drawer -->
+        <div class="dialog-overlay" id="settingsModal">
+            <div class="dialog-card settings-card">
+                <div class="dialog-top">
+                    <h2>App Settings & Reading</h2>
+                    <button id="closeSettingsModal">&times;</button>
+                </div>
+                
+                <div class="settings-content">
+                    <!-- Font Size -->
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <span class="setting-label">Verse Font Size</span>
+                            <span class="setting-desc">Adjust for comfortable reading</span>
+                        </div>
+                        <div class="font-controls">
+                            <button class="font-btn" id="fontDecBtn">A-</button>
+                            <span class="font-size-val" id="fontSizeVal">17px</span>
+                            <button class="font-btn" id="fontIncBtn">A+</button>
+                        </div>
+                    </div>
+
+                    <!-- Audio Speed -->
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <span class="setting-label">Audio Recitation Pace</span>
+                            <span class="setting-desc">Chanting tempo</span>
+                        </div>
+                        <div class="speed-toggle" id="speedToggle">
+                            <button class="speed-pill" data-speed="0.75">0.75x</button>
+                            <button class="speed-pill active" data-speed="1.0">1.0x</button>
+                            <button class="speed-pill" data-speed="1.25">1.25x</button>
+                        </div>
+                    </div>
+
+                    <!-- Theme Toggle -->
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <span class="setting-label">Display Theme</span>
+                            <span class="setting-desc">Temple Midnight / Serene Parchment</span>
+                        </div>
+                        <button class="theme-switch-btn" id="themeToggle">
+                            <span id="themeToggleText">🌙 Dark Temple</span>
+                        </button>
+                    </div>
+
+                    <!-- Meaning Toggle inside settings -->
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <span class="setting-label">Verse Meanings (भावार्थ)</span>
+                            <span class="setting-desc">Show authentic Hindi & English meaning</span>
+                        </div>
+                        <label class="switch-toggle">
+                            <input type="checkbox" id="meaningCheckbox" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Verse Jump Modal Drawer -->
         <div class="dialog-overlay" id="jumpModal">
             <div class="dialog-card">
                 <div class="dialog-top">
-                    <h2>Go to Verse / Chaupai (1-40)</h2>
-                    <button id="closeJumpModal" aria-label="Close Navigator">&times;</button>
+                    <h2>Go to Verse / Chaupai</h2>
+                    <button id="closeJumpModal">&times;</button>
                 </div>
                 <div class="dialog-grid" id="jumpGrid">
                     <!-- Populated dynamically -->
@@ -205,12 +244,12 @@
             </div>
         </div>
 
-        <!-- Completion Celebration Modal -->
+        <!-- Completion Celebration Dialog -->
         <div class="dialog-overlay" id="completionOverlay">
             <div class="dialog-card completion-card">
                 <div class="divine-star">🌟</div>
                 <h2 class="divine-heading">Jai Shri Ram!</h2>
-                <p class="divine-sub">Shri Hanuman Chalisa Path completed with full devotion and bhakti.</p>
+                <p class="divine-sub">Shri Hanuman Chalisa Path completed with devotion.</p>
                 
                 <div class="completion-metrics">
                     <div class="metric-block">
@@ -219,7 +258,7 @@
                     </div>
                     <div class="metric-block">
                         <div class="metric-num-gold" id="completionCount">1</div>
-                        <div class="metric-label">Completed Chants</div>
+                        <div class="metric-label">Recitations</div>
                     </div>
                 </div>
 
@@ -255,7 +294,7 @@
         </div>
     </footer>
 
-    <!-- Scripts in strict dependency order -->
+    <!-- Scripts -->
     <script src="js/chalisa-meanings.js"></script>
     <script src="js/chalisa-data.js"></script>
     <script src="js/app.js"></script>

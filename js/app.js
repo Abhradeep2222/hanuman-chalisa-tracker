@@ -1,13 +1,6 @@
 /**
- * Shri Hanuman Chalisa - Advanced AI Devotional Engine
- * Features:
- * 1. AI Real-Time Voice Speech Recognition with Multi-Script Phonetic Matcher
- * 2. Real-time Recitation Accuracy Scoring with Divine Tiers
- * 3. Web Audio API Live Microphone Equalizer Waveform & Divine Chime
- * 4. Devotional Audio Recitation (Listen & Learn) with Speed Controller
- * 5. Tap-to-Chant with Mobile Haptic Feedback
- * 6. Dual-Language Meaning (Bhavarth) & Font Size Resizer
- * 7. Sankalpa Mala Goal Tracker (1x, 7x, 11x, 21x, 108x)
+ * Shri Hanuman Chalisa - Production-Grade AI Devotional Engine
+ * Engineered for 100% Reliability on all Mobile & Desktop Devices.
  */
 
 class HanumanChalisaApp {
@@ -15,7 +8,7 @@ class HanumanChalisaApp {
     this.lines = getFlatLines();
     this.totalLines = this.lines.length;
 
-    // Persisted User Preferences
+    // Persisted Preferences
     this.language = localStorage.getItem('hc_lang') || 'auto';
     this.currentLineIndex = parseInt(localStorage.getItem('hc_currentLine') || '0', 10);
     if (isNaN(this.currentLineIndex) || this.currentLineIndex < 0 || this.currentLineIndex >= this.totalLines) {
@@ -32,25 +25,24 @@ class HanumanChalisaApp {
     this.showMeanings = localStorage.getItem('hc_showMeanings') !== 'false';
     this.recitationSpeed = 1.0;
 
-    // Scoring & Tracking
-    this.matchedWordsCount = 0;
-    this.attemptedWordsCount = 0;
-    this.skippedWordsCount = 0;
-    this.lineAccuracies = {};
+    // Accuracy & Scoring
+    this.totalAttemptedWords = 0;
+    this.totalMatchedWords = 0;
+    this.lineScores = {};
 
     // State Flags
     this.isListening = false;
     this.isAiChanting = false;
     this.recognition = null;
     this.speechSynth = window.speechSynthesis || null;
+    this.aiKaraokeTimer = null;
 
-    // Web Audio API State
+    // Web Audio API
     this.audioCtx = null;
     this.analyser = null;
     this.micStream = null;
     this.animFrameId = null;
 
-    // Cache DOM Elements
     this.bindDomElements();
     this.init();
   }
@@ -58,17 +50,23 @@ class HanumanChalisaApp {
   bindDomElements() {
     this.els = {
       languageSelect: document.getElementById('languageSelect'),
-      themeToggle: document.getElementById('themeToggle'),
       toggleMeaningBtn: document.getElementById('toggleMeaningBtn'),
+      openSettingsBtn: document.getElementById('openSettingsBtn'),
+      closeSettingsModal: document.getElementById('closeSettingsModal'),
+      settingsModal: document.getElementById('settingsModal'),
       fontDecBtn: document.getElementById('fontDecBtn'),
       fontIncBtn: document.getElementById('fontIncBtn'),
+      fontSizeVal: document.getElementById('fontSizeVal'),
+      themeToggle: document.getElementById('themeToggle'),
+      themeToggleText: document.getElementById('themeToggleText'),
+      meaningCheckbox: document.getElementById('meaningCheckbox'),
+      speedToggle: document.getElementById('speedToggle'),
       startBtn: document.getElementById('startBtn'),
       startBtnText: document.getElementById('startBtnText'),
       aiAutoChantBtn: document.getElementById('aiAutoChantBtn'),
       aiAutoChantText: document.getElementById('aiAutoChantText'),
       tapSyncBtn: document.getElementById('tapSyncBtn'),
       resetBtn: document.getElementById('resetBtn'),
-      speedToggle: document.getElementById('speedToggle'),
       chantCount: document.getElementById('chantCount'),
       targetSub: document.getElementById('targetSub'),
       accuracyScore: document.getElementById('accuracyScore'),
@@ -103,6 +101,13 @@ class HanumanChalisaApp {
       this.els.languageSelect.value = this.language;
     }
 
+    if (this.els.meaningCheckbox) {
+      this.els.meaningCheckbox.checked = this.showMeanings;
+    }
+    if (this.els.toggleMeaningBtn) {
+      this.els.toggleMeaningBtn.classList.toggle('active', this.showMeanings);
+    }
+
     this.renderChalisa();
     this.buildJumpModal();
     this.updateStatsDisplay();
@@ -124,7 +129,7 @@ class HanumanChalisaApp {
       this.els.startBtn.addEventListener('click', () => this.toggleListening());
     }
 
-    // 2. Audio Recitation Mode
+    // 2. Audio Recitation (Listen & Learn)
     if (this.els.aiAutoChantBtn) {
       this.els.aiAutoChantBtn.addEventListener('click', () => this.toggleAiRecitation());
     }
@@ -134,7 +139,7 @@ class HanumanChalisaApp {
       this.els.tapSyncBtn.addEventListener('click', () => this.advanceWordOrLine());
     }
 
-    // Spacebar to advance
+    // Keyboard Spacebar
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Space' && (e.target === document.body || e.target.tagName !== 'INPUT')) {
         e.preventDefault();
@@ -142,7 +147,7 @@ class HanumanChalisaApp {
       }
     });
 
-    // Reset Session
+    // Reset Button
     if (this.els.resetBtn) {
       this.els.resetBtn.addEventListener('click', () => this.resetSession());
     }
@@ -152,17 +157,40 @@ class HanumanChalisaApp {
       this.els.languageSelect.addEventListener('change', (e) => this.changeLanguage(e.target.value));
     }
 
-    // Theme Toggle
-    if (this.els.themeToggle) {
-      this.els.themeToggle.addEventListener('click', () => this.toggleTheme());
-    }
-
-    // Meaning Toggle Button
+    // Meaning Quick Toggle Button
     if (this.els.toggleMeaningBtn) {
-      this.els.toggleMeaningBtn.addEventListener('click', () => this.toggleMeanings());
+      this.els.toggleMeaningBtn.addEventListener('click', () => {
+        this.showMeanings = !this.showMeanings;
+        this.applyMeaningsVisibility();
+      });
     }
 
-    // Font Size Buttons
+    // Settings Modal
+    if (this.els.openSettingsBtn) {
+      this.els.openSettingsBtn.addEventListener('click', () => {
+        if (this.els.settingsModal) this.els.settingsModal.classList.add('open');
+      });
+    }
+    if (this.els.closeSettingsModal) {
+      this.els.closeSettingsModal.addEventListener('click', () => {
+        if (this.els.settingsModal) this.els.settingsModal.classList.remove('open');
+      });
+    }
+    if (this.els.settingsModal) {
+      this.els.settingsModal.addEventListener('click', (e) => {
+        if (e.target === this.els.settingsModal) this.els.settingsModal.classList.remove('open');
+      });
+    }
+
+    // Meaning Checkbox in Settings
+    if (this.els.meaningCheckbox) {
+      this.els.meaningCheckbox.addEventListener('change', (e) => {
+        this.showMeanings = e.target.checked;
+        this.applyMeaningsVisibility();
+      });
+    }
+
+    // Font Size in Settings
     if (this.els.fontDecBtn) {
       this.els.fontDecBtn.addEventListener('click', () => this.changeFontSize(-1));
     }
@@ -170,7 +198,12 @@ class HanumanChalisaApp {
       this.els.fontIncBtn.addEventListener('click', () => this.changeFontSize(1));
     }
 
-    // Speed Selector
+    // Theme Toggle inside Settings
+    if (this.els.themeToggle) {
+      this.els.themeToggle.addEventListener('click', () => this.toggleTheme());
+    }
+
+    // Speed Selector in Settings
     if (this.els.speedToggle) {
       this.els.speedToggle.addEventListener('click', (e) => {
         const pill = e.target.closest('.speed-pill');
@@ -185,7 +218,7 @@ class HanumanChalisaApp {
       });
     }
 
-    // Sankalpa Target Buttons
+    // Sankalpa Target Pills
     this.els.targetButtons.forEach(btn => {
       btn.addEventListener('click', () => {
         this.els.targetButtons.forEach(b => b.classList.remove('active'));
@@ -196,7 +229,7 @@ class HanumanChalisaApp {
       });
     });
 
-    // Navigation & Completion Modals
+    // Jump & Completion Modals
     if (this.els.progressCard) {
       this.els.progressCard.addEventListener('click', () => this.openJumpModal());
     }
@@ -226,6 +259,9 @@ class HanumanChalisaApp {
 
   applyTheme() {
     document.documentElement.setAttribute('data-theme', this.theme);
+    if (this.els.themeToggleText) {
+      this.els.themeToggleText.textContent = this.theme === 'dark' ? '🌙 Dark Temple' : '☀️ Light Parchment';
+    }
   }
 
   toggleTheme() {
@@ -236,6 +272,9 @@ class HanumanChalisaApp {
 
   applyFontSize() {
     document.documentElement.style.setProperty('--line-font-size', `${this.fontScale}px`);
+    if (this.els.fontSizeVal) {
+      this.els.fontSizeVal.textContent = `${this.fontScale}px`;
+    }
   }
 
   changeFontSize(delta) {
@@ -244,14 +283,16 @@ class HanumanChalisaApp {
     this.applyFontSize();
   }
 
-  toggleMeanings() {
-    this.showMeanings = !this.showMeanings;
+  applyMeaningsVisibility() {
     localStorage.setItem('hc_showMeanings', String(this.showMeanings));
     document.querySelectorAll('.verse-meaning').forEach(el => {
       el.style.display = this.showMeanings ? 'block' : 'none';
     });
     if (this.els.toggleMeaningBtn) {
       this.els.toggleMeaningBtn.classList.toggle('active', this.showMeanings);
+    }
+    if (this.els.meaningCheckbox) {
+      this.els.meaningCheckbox.checked = this.showMeanings;
     }
   }
 
@@ -264,6 +305,10 @@ class HanumanChalisaApp {
     if (this.isListening) {
       this.stopListening();
       setTimeout(() => this.startListening(), 250);
+    }
+    if (this.isAiChanting) {
+      this.stopAiRecitation();
+      setTimeout(() => this.startAiRecitation(), 250);
     }
   }
 
@@ -287,7 +332,7 @@ class HanumanChalisaApp {
         currentBlock.className = 'verse-card';
         currentBlock.dataset.verseKey = verseKey;
 
-        // Verse Header Label
+        // Header Label
         const headerDiv = document.createElement('div');
         headerDiv.className = 'verse-header';
 
@@ -321,7 +366,6 @@ class HanumanChalisaApp {
       lineEl.id = `line-${i}`;
 
       lineEl.addEventListener('click', (e) => {
-        // If clicking a word directly
         const wordEl = e.target.closest('.word-unit');
         if (wordEl) {
           const wIdx = parseInt(wordEl.dataset.wordIdx, 10);
@@ -335,7 +379,7 @@ class HanumanChalisaApp {
       const fontClass = displayLang === 'hi' ? 'devanagari' : (displayLang === 'bn' ? 'bengali' : '');
       textEl.className = `line-content ${fontClass}`;
 
-      // Render tokens
+      // Render aligned tokens
       const tokens = line.wordTokens;
       textEl.innerHTML = tokens.map((token, wIdx) => {
         let wordDisplay = token.en;
@@ -348,29 +392,27 @@ class HanumanChalisaApp {
 
       lineEl.appendChild(textEl);
 
-      // Line status chip
+      // Line chip
       const chip = document.createElement('span');
       chip.className = 'line-status-chip';
       if (isPast) {
-        chip.textContent = '✓ 100%';
+        const sc = this.lineScores[i] !== undefined ? Math.round(this.lineScores[i] * 100) : 100;
+        chip.textContent = `✓ ${sc}%`;
         chip.classList.add('done');
       }
       lineEl.appendChild(chip);
 
       currentBlock.appendChild(lineEl);
 
-      // If last line of this verse, append Meaning
+      // Meaning box
       if (line.lineInVerse === 2 && line.meaning) {
         const meaningDiv = document.createElement('div');
         meaningDiv.className = 'verse-meaning';
         meaningDiv.style.display = this.showMeanings ? 'block' : 'none';
 
-        const hiText = line.meaning.hi;
-        const enText = line.meaning.en;
-
         meaningDiv.innerHTML = `
-          <div class="meaning-hi"><strong>अर्थ:</strong> ${hiText}</div>
-          <div class="meaning-en"><strong>Meaning:</strong> ${enText}</div>
+          <div class="meaning-hi"><strong>अर्थ:</strong> ${line.meaning.hi}</div>
+          <div class="meaning-en"><strong>Meaning:</strong> ${line.meaning.en}</div>
         `;
         currentBlock.appendChild(meaningDiv);
       }
@@ -487,7 +529,7 @@ class HanumanChalisaApp {
   startListening() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Your browser does not support Speech Recognition. Please use "Tap Sync" or "Listen & Learn".');
+      alert('Your browser does not support Speech Recognition. You can use "Tap Sync" or "Listen & Learn".');
       return;
     }
 
@@ -500,7 +542,7 @@ class HanumanChalisaApp {
     this.recognition.interimResults = true;
     this.recognition.maxAlternatives = 2;
 
-    // Set acoustic model
+    // Use Indian acoustic model
     this.recognition.lang = this.language === 'bn' ? 'bn-IN' : 'hi-IN';
 
     this.recognition.onstart = () => {
@@ -528,11 +570,8 @@ class HanumanChalisaApp {
     };
 
     this.recognition.onerror = (e) => {
-      if (e.error === 'no-speech') {
-        // Keep listening quietly without disturbing UI
-        return;
-      }
-      console.warn('Speech recognition status:', e.error);
+      if (e.error === 'no-speech') return;
+      console.warn('Speech status:', e.error);
     };
 
     this.recognition.onend = () => {
@@ -551,9 +590,7 @@ class HanumanChalisaApp {
 
     try {
       this.recognition.start();
-    } catch (err) {
-      console.warn('Recognition start exception:', err);
-    }
+    } catch (err) {}
 
     this.highlightCurrentLine(true);
   }
@@ -596,7 +633,7 @@ class HanumanChalisaApp {
           if (this.els.eqBars && this.els.eqBars.length > 0) {
             for (let b = 0; b < this.els.eqBars.length; b++) {
               const val = dataArray[b * 2] || 0;
-              const height = Math.max(4, Math.round((val / 255) * 22));
+              const height = Math.max(3, Math.round((val / 255) * 20));
               this.els.eqBars[b].style.height = `${height}px`;
             }
           }
@@ -623,11 +660,11 @@ class HanumanChalisaApp {
       this.audioCtx = null;
     }
     if (this.els.eqBars) {
-      this.els.eqBars.forEach(b => b.style.height = '4px');
+      this.els.eqBars.forEach(b => b.style.height = '3px');
     }
   }
 
-  // ==================== Multi-Script Phonetic Matcher ====================
+  // ==================== Multi-Script Awadhi-to-Hindi Matcher ====================
 
   matchSpokenSpeech(spokenString) {
     if (this.currentLineIndex >= this.totalLines) return;
@@ -660,16 +697,23 @@ class HanumanChalisaApp {
                             sw.skeleton.includes(target.skeleton) || 
                             target.skeleton.includes(sw.skeleton));
 
-        const isPhonetic = sw.phonetic.length >= 3 && target.phonetic.length >= 3 &&
+        const isPhonetic = sw.phonetic.length >= 2 && target.phonetic.length >= 2 &&
                            (sw.phonetic.includes(target.phonetic) || target.phonetic.includes(sw.phonetic));
 
         if (isExact || isSkeleton || isPhonetic) {
-          // Highlight all words up to this index
+          // If we skipped any words in between, record them as missed
+          const skipped = tIdx - this.currentWordIdx;
+          if (skipped > 0) {
+            this.totalAttemptedWords += skipped;
+          }
+
+          // Highlight words
           for (let k = this.currentWordIdx; k <= tIdx; k++) {
             this.highlightWord(this.currentLineIndex, k);
-            this.matchedWordsCount++;
-            this.attemptedWordsCount++;
+            this.totalMatchedWords++;
+            this.totalAttemptedWords++;
           }
+
           this.currentWordIdx = tIdx + 1;
           matchedAny = true;
 
@@ -681,16 +725,16 @@ class HanumanChalisaApp {
     }
 
     if (matchedAny) {
-      this.calculateAccuracy();
+      this.calculateRealtimeAccuracy();
     }
 
-    // Line completion condition: reached end of words or chanted at least 75%
+    // Line completion: all words chanted or at least 75%
     if (this.currentWordIdx >= targetTokens.length || (targetTokens.length >= 4 && this.currentWordIdx >= Math.ceil(targetTokens.length * 0.75))) {
       this.completeCurrentLine();
     }
   }
 
-  // ==================== MODE 2: Devotional Audio Recitation (Listen & Learn) ====================
+  // ==================== MODE 2: Devotional Audio Recitation (All Languages) ====================
 
   toggleAiRecitation() {
     if (this.isAiChanting) {
@@ -701,11 +745,6 @@ class HanumanChalisaApp {
   }
 
   startAiRecitation() {
-    if (!this.speechSynth) {
-      alert('Speech audio is not available in your browser.');
-      return;
-    }
-
     if (this.isListening) {
       this.stopListening();
     }
@@ -722,7 +761,11 @@ class HanumanChalisaApp {
   stopAiRecitation() {
     this.isAiChanting = false;
     if (this.speechSynth) {
-      this.speechSynth.cancel();
+      try { this.speechSynth.cancel(); } catch (e) {}
+    }
+    if (this.aiKaraokeTimer) {
+      clearTimeout(this.aiKaraokeTimer);
+      this.aiKaraokeTimer = null;
     }
 
     this.els.aiAutoChantBtn.classList.remove('active');
@@ -740,41 +783,94 @@ class HanumanChalisaApp {
 
     const line = this.lines[this.currentLineIndex];
     const displayLang = this.language === 'auto' ? 'en' : this.language;
-    const vocalText = displayLang === 'bn' ? line.bn : line.hi;
     const tokens = line.wordTokens;
 
-    this.speechSynth.cancel();
-    const utter = new SpeechSynthesisUtterance(vocalText);
-    utter.rate = this.recitationSpeed * 0.82;
-    utter.pitch = 1.0;
-    utter.lang = displayLang === 'bn' ? 'bn-IN' : 'hi-IN';
+    // Pick vocal text based on language
+    let vocalText = line.hi;
+    let langCode = 'hi-IN';
+    if (displayLang === 'bn') {
+      vocalText = line.bn;
+      langCode = 'bn-IN';
+    } else if (displayLang === 'en') {
+      vocalText = line.en.replace(/[|]/g, '').trim();
+      langCode = 'en-IN';
+    }
 
-    this.els.transcriptText.textContent = `🎵 AI: "${vocalText}"`;
+    this.els.transcriptText.textContent = `🎵 Chanting: "${vocalText}"`;
 
+    // Check if device speech synthesis supports this voice
+    let hasVoice = false;
+    if (this.speechSynth) {
+      try {
+        const voices = this.speechSynth.getVoices();
+        const prefix = langCode.split('-')[0].toLowerCase();
+        hasVoice = voices.some(v => v.lang && (v.lang.toLowerCase().includes(prefix) || v.lang.toLowerCase().includes('in')));
+      } catch (e) {}
+    }
+
+    if (this.speechSynth && hasVoice) {
+      // Hardware voice path
+      this.speechSynth.cancel();
+      const utter = new SpeechSynthesisUtterance(vocalText);
+      utter.rate = this.recitationSpeed * 0.82;
+      utter.pitch = 1.0;
+      utter.lang = langCode;
+
+      let wIdx = 0;
+      utter.onboundary = (e) => {
+        if (e.name === 'word' && wIdx < tokens.length) {
+          this.highlightWord(this.currentLineIndex, wIdx);
+          wIdx++;
+          this.totalMatchedWords++;
+          this.totalAttemptedWords++;
+          this.calculateRealtimeAccuracy();
+        }
+      };
+
+      utter.onend = () => {
+        if (!this.isAiChanting) return;
+        this.completeCurrentLine();
+        setTimeout(() => {
+          if (this.isAiChanting) this.reciteCurrentLineAudio();
+        }, 320);
+      };
+
+      utter.onerror = () => {
+        // Voice failed, fall back to Audio Karaoke Timer Engine
+        this.runAudioKaraokeTimer(tokens);
+      };
+
+      this.speechSynth.speak(utter);
+    } else {
+      // Audio Karaoke Timer Engine (100% reliable across all languages & devices)
+      this.runAudioKaraokeTimer(tokens);
+    }
+  }
+
+  runAudioKaraokeTimer(tokens) {
     let wIdx = 0;
-    utter.onboundary = (e) => {
-      if (e.name === 'word' && wIdx < tokens.length) {
+    const wordInterval = Math.round(580 / this.recitationSpeed);
+
+    const stepWord = () => {
+      if (!this.isAiChanting) return;
+
+      if (wIdx < tokens.length) {
         this.highlightWord(this.currentLineIndex, wIdx);
+        this.playSoftNote();
         wIdx++;
-        this.matchedWordsCount++;
-        this.attemptedWordsCount++;
-        this.calculateAccuracy();
+        this.totalMatchedWords++;
+        this.totalAttemptedWords++;
+        this.calculateRealtimeAccuracy();
+        this.aiKaraokeTimer = setTimeout(stepWord, wordInterval);
+      } else {
+        this.completeCurrentLine();
+        this.aiKaraokeTimer = setTimeout(() => {
+          if (this.isAiChanting) this.reciteCurrentLineAudio();
+        }, 320);
       }
     };
 
-    utter.onend = () => {
-      if (!this.isAiChanting) return;
-      this.completeCurrentLine();
-      setTimeout(() => {
-        if (this.isAiChanting) this.reciteCurrentLineAudio();
-      }, 300);
-    };
-
-    utter.onerror = () => {
-      this.stopAiRecitation();
-    };
-
-    this.speechSynth.speak(utter);
+    stepWord();
   }
 
   // ==================== MODE 3: Tap-to-Chant (Zero Lag Touch / Mala) ====================
@@ -782,9 +878,8 @@ class HanumanChalisaApp {
   advanceWordOrLine() {
     if (this.currentLineIndex >= this.totalLines) return;
 
-    // Mobile haptic vibration
     if (navigator.vibrate) {
-      try { navigator.vibrate(30); } catch (e) {}
+      try { navigator.vibrate(28); } catch (e) {}
     }
 
     const line = this.lines[this.currentLineIndex];
@@ -793,16 +888,16 @@ class HanumanChalisaApp {
     if (this.currentWordIdx < tokens.length) {
       this.highlightWord(this.currentLineIndex, this.currentWordIdx);
       this.currentWordIdx++;
-      this.matchedWordsCount++;
-      this.attemptedWordsCount++;
-      this.calculateAccuracy();
+      this.totalMatchedWords++;
+      this.totalAttemptedWords++;
+      this.calculateRealtimeAccuracy();
 
       const lastWord = tokens[this.currentWordIdx - 1];
       const displayWord = this.language === 'hi' ? lastWord.hi : (this.language === 'bn' ? lastWord.bn : lastWord.en);
       this.els.transcriptText.textContent = `✓ Chanted: "${displayWord}" (${this.currentWordIdx}/${tokens.length})`;
 
       if (this.currentWordIdx >= tokens.length) {
-        setTimeout(() => this.completeCurrentLine(), 150);
+        setTimeout(() => this.completeCurrentLine(), 140);
       }
     } else {
       this.completeCurrentLine();
@@ -822,20 +917,26 @@ class HanumanChalisaApp {
 
   completeCurrentLine() {
     const lineEl = document.getElementById(`line-${this.currentLineIndex}`);
+    const line = this.lines[this.currentLineIndex];
+    const totalTokens = line.wordTokens.length;
+
+    // Line accuracy score
+    const lineAcc = this.currentWordIdx > 0 ? Math.min(1.0, this.currentWordIdx / totalTokens) : 1.0;
+    this.lineScores[this.currentLineIndex] = lineAcc;
+
     if (lineEl) {
       lineEl.className = 'chalisa-line-row matched';
       lineEl.querySelectorAll('.word-unit').forEach(w => w.classList.add('chanted'));
 
       const chip = lineEl.querySelector('.line-status-chip');
       if (chip) {
-        chip.textContent = '✓ 100%';
+        chip.textContent = `✓ ${Math.round(lineAcc * 100)}%`;
         chip.classList.add('done');
       }
     }
 
     this.playDivineChime();
 
-    this.lineAccuracies[this.currentLineIndex] = 1.0;
     this.currentLineIndex++;
     this.currentWordIdx = 0;
     localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
@@ -868,16 +969,16 @@ class HanumanChalisaApp {
     });
   }
 
-  // ==================== Accuracy & Metrics ====================
+  // ==================== Accuracy Calculation ====================
 
-  calculateAccuracy() {
-    if (this.attemptedWordsCount === 0) {
+  calculateRealtimeAccuracy() {
+    if (this.totalAttemptedWords === 0) {
       this.els.accuracyScore.textContent = '100%';
       this.updateAccuracyBadge(100);
       return;
     }
 
-    const accuracy = Math.min(100, Math.max(50, Math.round((this.matchedWordsCount / this.attemptedWordsCount) * 100)));
+    const accuracy = Math.min(100, Math.max(50, Math.round((this.totalMatchedWords / this.totalAttemptedWords) * 100)));
     this.els.accuracyScore.textContent = `${accuracy}%`;
     this.updateAccuracyBadge(accuracy);
   }
@@ -931,7 +1032,7 @@ class HanumanChalisaApp {
 
   updateTargetDisplay() {
     if (this.els.targetSub) {
-      this.els.targetSub.textContent = `Goal: ${this.sankalpaTarget} (${this.chantCount}/${this.sankalpaTarget})`;
+      this.els.targetSub.textContent = `Goal: ${this.sankalpaTarget}x (${this.chantCount}/${this.sankalpaTarget})`;
     }
   }
 
@@ -963,7 +1064,7 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== Synthesized Web Audio Temple Chime ====================
+  // ==================== Synthesized Web Audio Tones ====================
 
   playDivineChime() {
     try {
@@ -973,17 +1074,38 @@ class HanumanChalisaApp {
       const gain = ctx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5 serene temple bell frequency
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.14);
 
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+      gain.gain.setValueAtTime(0.07, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.65);
+      osc.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+  }
+
+  playSoftNote() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+
+      gain.gain.setValueAtTime(0.015, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.16);
     } catch (e) {}
   }
 
@@ -994,10 +1116,10 @@ class HanumanChalisaApp {
     this.stopAiRecitation();
     this.currentLineIndex = 0;
     this.currentWordIdx = 0;
-    this.matchedWordsCount = 0;
-    this.attemptedWordsCount = 0;
+    this.totalAttemptedWords = 0;
+    this.totalMatchedWords = 0;
     localStorage.setItem('hc_currentLine', '0');
-    this.lineAccuracies = {};
+    this.lineScores = {};
 
     this.renderChalisa();
     this.highlightCurrentLine(false);
