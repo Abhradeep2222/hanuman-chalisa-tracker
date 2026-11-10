@@ -6,6 +6,12 @@
     <title>Shri Hanuman Chalisa | AI Voice Chanting & Accuracy Tracker</title>
     <meta name="description" content="Authentic Shri Hanuman Chalisa with real-time AI speech recognition, word-by-word karaoke glow, pronunciation accuracy score, and multilingual meanings.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F59E0B'><circle cx='12' cy='12' r='10'/></svg>">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#F59E0B">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Hanuman Chalisa">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -273,6 +279,20 @@
                 </div>
             </div>
         </div>
+
+        <!-- Mobile Browser Notice Dialog -->
+        <div class="dialog-overlay" id="mobileNoticeModal">
+            <div class="dialog-card notice-card">
+                <div class="notice-icon">🎙️</div>
+                <h2 id="noticeTitle">Microphone Notice</h2>
+                <p id="noticeDesc">Please allow microphone access or choose your chanting mode.</p>
+                <div class="notice-actions">
+                    <button class="action-btn btn-auto" id="noticeUseAudioBtn">Listen & Learn</button>
+                    <button class="action-btn btn-tap" id="noticeUseTapBtn">Tap Sync</button>
+                    <button class="action-btn btn-reset" id="closeNoticeBtn">Dismiss</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Bottom Floating Status HUD with Live Audio Visualizer -->
@@ -299,5 +319,12 @@
     <script src="js/chalisa-meanings.js"></script>
     <script src="js/chalisa-data.js"></script>
     <script src="js/app.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('sw.js').catch(() => {});
+        });
+      }
+    </script>
 </body>
 </html>

@@ -3,30 +3,49 @@
  * Engineered for 100% Reliability on Mobile, Tablet & Desktop.
  */
 
+const safeStorage = {
+  get(key, fallback = null) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const val = window.localStorage.getItem(key);
+        return val !== null ? val : fallback;
+      }
+    } catch (e) {}
+    return fallback;
+  },
+  set(key, val) {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, String(val));
+      }
+    } catch (e) {}
+  }
+};
+
 class HanumanChalisaApp {
   constructor() {
-    this.lines = getFlatLines();
+    this.lines = typeof getFlatLines === 'function' ? getFlatLines() : [];
     this.totalLines = this.lines.length;
 
     // Detect mobile device
     this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-    // Persisted Preferences
-    this.language = localStorage.getItem('hc_lang') || 'auto';
-    this.meaningLang = localStorage.getItem('hc_meaningLang') || 'hi';
-    this.currentLineIndex = parseInt(localStorage.getItem('hc_currentLine') || '0', 10);
+    // Persisted Preferences (100% safe against SecurityError in private mode)
+    this.language = safeStorage.get('hc_lang', 'auto');
+    this.meaningLang = safeStorage.get('hc_meaningLang', 'hi');
+    this.currentLineIndex = parseInt(safeStorage.get('hc_currentLine', '0'), 10);
     if (isNaN(this.currentLineIndex) || this.currentLineIndex < 0 || this.currentLineIndex >= this.totalLines) {
       this.currentLineIndex = 0;
     }
 
     this.currentWordIdx = 0;
-    this.chantCount = parseInt(localStorage.getItem('hc_chantCount') || '0', 10);
-    this.sankalpaTarget = parseInt(localStorage.getItem('hc_sankalpa') || '1', 10);
-    this.streak = parseInt(localStorage.getItem('hc_streak') || '0', 10);
-    this.lastChantDate = localStorage.getItem('hc_lastChantDate') || '';
-    this.theme = localStorage.getItem('hc_theme') || 'dark';
-    this.fontScale = parseInt(localStorage.getItem('hc_fontScale') || '17', 10);
-    this.showMeanings = localStorage.getItem('hc_showMeanings') !== 'false';
+    this.chantCount = parseInt(safeStorage.get('hc_chantCount', '0'), 10);
+    this.sankalpaTarget = parseInt(safeStorage.get('hc_sankalpa', '1'), 10);
+    this.streak = parseInt(safeStorage.get('hc_streak', '0'), 10);
+    this.lastChantDate = safeStorage.get('hc_lastChantDate', '');
+    this.theme = safeStorage.get('hc_theme', 'dark');
+    this.fontScale = parseInt(safeStorage.get('hc_fontScale', '17'), 10);
+    this.showMeanings = safeStorage.get('hc_showMeanings') !== 'false';
     this.recitationSpeed = 1.0;
 
     // Accuracy & Scoring
@@ -94,7 +113,13 @@ class HanumanChalisaApp {
       jumpModal: document.getElementById('jumpModal'),
       closeJumpModal: document.getElementById('closeJumpModal'),
       jumpGrid: document.getElementById('jumpGrid'),
-      targetButtons: document.querySelectorAll('.target-btn')
+      targetButtons: document.querySelectorAll('.target-btn'),
+      mobileNoticeModal: document.getElementById('mobileNoticeModal'),
+      noticeTitle: document.getElementById('noticeTitle'),
+      noticeDesc: document.getElementById('noticeDesc'),
+      noticeUseAudioBtn: document.getElementById('noticeUseAudioBtn'),
+      noticeUseTapBtn: document.getElementById('noticeUseTapBtn'),
+      closeNoticeBtn: document.getElementById('closeNoticeBtn')
     };
   }
 
@@ -129,20 +154,47 @@ class HanumanChalisaApp {
   setupEventListeners() {
     // 1. Microphone Voice Mode (Direct user gesture for mobile security)
     if (this.els.startBtn) {
-      this.els.startBtn.addEventListener('click', (e) => {
-        e.preventDefault();
+      this.els.startBtn.addEventListener('click', () => {
         this.toggleListening();
       });
     }
 
     // 2. Audio Recitation (Listen & Learn)
     if (this.els.aiAutoChantBtn) {
-      this.els.aiAutoChantBtn.addEventListener('click', () => this.toggleAiRecitation());
+      this.els.aiAutoChantBtn.addEventListener('click', () => {
+        this.toggleAiRecitation();
+      });
     }
 
     // 3. Tap to Sync (Tactile Word Advance)
     if (this.els.tapSyncBtn) {
-      this.els.tapSyncBtn.addEventListener('click', () => this.advanceWordOrLine());
+      this.els.tapSyncBtn.addEventListener('click', () => {
+        this.advanceWordOrLine();
+      });
+    }
+
+    // Notice Modal Action Buttons
+    if (this.els.noticeUseAudioBtn) {
+      this.els.noticeUseAudioBtn.addEventListener('click', () => {
+        this.closeMobileNotice();
+        this.startAiRecitation();
+      });
+    }
+    if (this.els.noticeUseTapBtn) {
+      this.els.noticeUseTapBtn.addEventListener('click', () => {
+        this.closeMobileNotice();
+        this.advanceWordOrLine();
+      });
+    }
+    if (this.els.closeNoticeBtn) {
+      this.els.closeNoticeBtn.addEventListener('click', () => {
+        this.closeMobileNotice();
+      });
+    }
+    if (this.els.mobileNoticeModal) {
+      this.els.mobileNoticeModal.addEventListener('click', (e) => {
+        if (e.target === this.els.mobileNoticeModal) this.closeMobileNotice();
+      });
     }
 
     // Keyboard Spacebar
@@ -189,7 +241,7 @@ class HanumanChalisaApp {
     if (this.els.meaningCheckbox) {
       this.els.meaningCheckbox.addEventListener('change', (e) => {
         this.showMeanings = e.target.checked;
-        localStorage.setItem('hc_showMeanings', String(this.showMeanings));
+        safeStorage.set('hc_showMeanings', String(this.showMeanings));
         this.renderChalisa();
       });
     }
@@ -228,7 +280,7 @@ class HanumanChalisaApp {
         this.els.targetButtons.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.sankalpaTarget = parseInt(btn.dataset.target, 10) || 1;
-        localStorage.setItem('hc_sankalpa', String(this.sankalpaTarget));
+        safeStorage.set('hc_sankalpa', String(this.sankalpaTarget));
         this.updateTargetDisplay();
       });
     });
@@ -261,6 +313,20 @@ class HanumanChalisaApp {
 
   // ==================== Meaning & Language Controls ====================
 
+  showMobileNotice(title, desc) {
+    if (this.els.noticeTitle) this.els.noticeTitle.textContent = title;
+    if (this.els.noticeDesc) this.els.noticeDesc.textContent = desc;
+    if (this.els.mobileNoticeModal) {
+      this.els.mobileNoticeModal.classList.add('open');
+    }
+  }
+
+  closeMobileNotice() {
+    if (this.els.mobileNoticeModal) {
+      this.els.mobileNoticeModal.classList.remove('open');
+    }
+  }
+
   cycleMeaningLanguage() {
     if (!this.showMeanings) {
       this.showMeanings = true;
@@ -273,8 +339,8 @@ class HanumanChalisaApp {
       this.showMeanings = false;
     }
 
-    localStorage.setItem('hc_showMeanings', String(this.showMeanings));
-    localStorage.setItem('hc_meaningLang', this.meaningLang);
+    safeStorage.set('hc_showMeanings', String(this.showMeanings));
+    safeStorage.set('hc_meaningLang', this.meaningLang);
 
     if (this.els.meaningCheckbox) {
       this.els.meaningCheckbox.checked = this.showMeanings;
@@ -304,15 +370,15 @@ class HanumanChalisaApp {
 
   changeLanguage(lang) {
     this.language = lang;
-    localStorage.setItem('hc_lang', lang);
+    safeStorage.set('hc_lang', lang);
 
     if (lang === 'bn') {
       this.meaningLang = 'bn';
-      localStorage.setItem('hc_meaningLang', 'bn');
+      safeStorage.set('hc_meaningLang', 'bn');
       this.updateMeaningButtonText();
     } else if (lang === 'hi') {
       this.meaningLang = 'hi';
-      localStorage.setItem('hc_meaningLang', 'hi');
+      safeStorage.set('hc_meaningLang', 'hi');
       this.updateMeaningButtonText();
     }
 
@@ -338,7 +404,7 @@ class HanumanChalisaApp {
 
   toggleTheme() {
     this.theme = this.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('hc_theme', this.theme);
+    safeStorage.set('hc_theme', this.theme);
     this.applyTheme();
   }
 
@@ -351,7 +417,7 @@ class HanumanChalisaApp {
 
   changeFontSize(delta) {
     this.fontScale = Math.min(24, Math.max(13, this.fontScale + delta));
-    localStorage.setItem('hc_fontScale', String(this.fontScale));
+    safeStorage.set('hc_fontScale', String(this.fontScale));
     this.applyFontSize();
   }
 
@@ -527,7 +593,7 @@ class HanumanChalisaApp {
     if (index < 0 || index >= this.totalLines) return;
     this.currentLineIndex = index;
     this.currentWordIdx = 0;
-    localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
+    safeStorage.set('hc_currentLine', String(this.currentLineIndex));
 
     for (let i = 0; i < this.totalLines; i++) {
       const el = document.getElementById(`line-${i}`);
@@ -579,7 +645,6 @@ class HanumanChalisaApp {
     if (!SpeechRecognition) return null;
 
     const rec = new SpeechRecognition();
-    // Continuous works on desktop; on mobile we use restart loop
     rec.continuous = !this.isMobile;
     rec.interimResults = true;
     rec.maxAlternatives = 3;
@@ -588,6 +653,7 @@ class HanumanChalisaApp {
     rec.onstart = () => {
       this.els.micDot.classList.add('live');
       this.els.micLabel.textContent = 'Mic Active';
+      this.els.startBtnText.textContent = 'Stop Voice';
       this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
     };
 
@@ -609,8 +675,11 @@ class HanumanChalisaApp {
       if (e.error === 'no-speech') return;
       console.warn('Speech error:', e.error);
       if (e.error === 'not-allowed') {
-        alert('Microphone permission was denied. Please allow microphone access in your browser settings.');
         this.stopListening();
+        this.showMobileNotice(
+          'Microphone Permission Required',
+          'Microphone access was blocked. Please tap the lock icon 🔒 in your browser address bar and choose "Allow Microphone", or use Listen & Learn or Tap Sync.'
+        );
       }
     };
 
@@ -636,7 +705,10 @@ class HanumanChalisaApp {
   startListening() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert('Speech Recognition is not supported by your browser. Please use "Tap Sync" or "Listen & Learn".');
+      this.showMobileNotice(
+        'Speech Recognition Unavailable',
+        'Your mobile browser restricts Web Speech Recognition. For live AI Voice chanting, open this link in Google Chrome on Android. You can also chant now using "Listen & Learn" or "Tap Sync"!'
+      );
       return;
     }
 
@@ -646,7 +718,10 @@ class HanumanChalisaApp {
 
     this.isListening = true;
     this.els.startBtn.classList.add('listening');
-    this.els.startBtnText.textContent = 'Stop Voice';
+    this.els.startBtnText.textContent = 'Starting Mic...';
+    this.els.micDot.classList.add('live');
+    this.els.micLabel.textContent = 'Connecting...';
+    this.els.transcriptText.textContent = '🎙️ Please allow mic permission if prompted...';
 
     try {
       this.recognition = this.createFreshRecognition();
@@ -655,6 +730,11 @@ class HanumanChalisaApp {
       }
     } catch (err) {
       console.warn('Recognition start exception:', err);
+      this.stopListening();
+      this.showMobileNotice(
+        'Microphone Access Needed',
+        'Could not start microphone. Please check your browser microphone permissions.'
+      );
     }
 
     this.startEqualizerAnimation();
@@ -816,6 +896,10 @@ class HanumanChalisaApp {
   // ==================== MODE 2: Devotional Audio Recitation (All Languages & Speeds) ====================
 
   toggleAiRecitation() {
+    this.playSoftNote();
+    if (this.speechSynth && this.speechSynth.paused) {
+      try { this.speechSynth.resume(); } catch (e) {}
+    }
     if (this.isAiChanting) {
       this.stopAiRecitation();
     } else {
@@ -959,6 +1043,7 @@ class HanumanChalisaApp {
   advanceWordOrLine() {
     if (this.currentLineIndex >= this.totalLines) return;
 
+    this.playSoftNote();
     if (navigator.vibrate) {
       try { navigator.vibrate(28); } catch (e) {}
     }
@@ -1019,7 +1104,7 @@ class HanumanChalisaApp {
 
     this.currentLineIndex++;
     this.currentWordIdx = 0;
-    localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
+    safeStorage.set('hc_currentLine', String(this.currentLineIndex));
 
     this.highlightCurrentLine(true);
     this.updateProgress();
@@ -1122,7 +1207,7 @@ class HanumanChalisaApp {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       if (this.lastChantDate !== yesterday) {
         this.streak = 0;
-        localStorage.setItem('hc_streak', '0');
+        safeStorage.set('hc_streak', '0');
       }
     }
     if (this.els.streakCount) {
@@ -1136,8 +1221,8 @@ class HanumanChalisaApp {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
       this.streak = (this.lastChantDate === yesterday || !this.lastChantDate) ? (this.streak + 1) : 1;
       this.lastChantDate = today;
-      localStorage.setItem('hc_streak', String(this.streak));
-      localStorage.setItem('hc_lastChantDate', today);
+      safeStorage.set('hc_streak', String(this.streak));
+      safeStorage.set('hc_lastChantDate', today);
     }
     if (this.els.streakCount) {
       this.els.streakCount.textContent = `${this.streak} d`;
@@ -1198,7 +1283,7 @@ class HanumanChalisaApp {
     this.currentWordIdx = 0;
     this.totalAttemptedWords = 0;
     this.totalMatchedWords = 0;
-    localStorage.setItem('hc_currentLine', '0');
+    safeStorage.set('hc_currentLine', '0');
     this.lineScores = {};
 
     this.renderChalisa();
@@ -1213,7 +1298,7 @@ class HanumanChalisaApp {
     this.stopAiRecitation();
 
     this.chantCount++;
-    localStorage.setItem('hc_chantCount', String(this.chantCount));
+    safeStorage.set('hc_chantCount', String(this.chantCount));
     if (this.els.chantCount) this.els.chantCount.textContent = this.chantCount;
     this.updateTargetDisplay();
 
@@ -1231,10 +1316,22 @@ class HanumanChalisaApp {
 
     this.currentLineIndex = 0;
     this.currentWordIdx = 0;
-    localStorage.setItem('hc_currentLine', '0');
+    safeStorage.set('hc_currentLine', '0');
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  window.app = new HanumanChalisaApp();
-});
+// 100% Reliable Bootloader for Mobile & Desktop
+function bootHanumanChalisa() {
+  if (window.app) return;
+  try {
+    window.app = new HanumanChalisaApp();
+  } catch (err) {
+    console.error('Boot error:', err);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootHanumanChalisa);
+} else {
+  bootHanumanChalisa();
+}
