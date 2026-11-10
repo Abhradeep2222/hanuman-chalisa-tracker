@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Shri Hanuman Chalisa | AI Voice Chanting & Accuracy Tracker</title>
-    <meta name="description" content="Authentic Shri Hanuman Chalisa with real-time AI speech recognition, word-by-word karaoke glow, pronunciation accuracy score, and meanings.">
+    <meta name="description" content="Authentic Shri Hanuman Chalisa with real-time AI speech recognition, word-by-word karaoke glow, pronunciation accuracy score, and multilingual meanings.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F59E0B'><circle cx='12' cy='12' r='10'/></svg>">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&family=Noto+Serif+Devanagari:wght@500;600;700&family=Noto+Serif+Bengali:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=3.0">
+    <link rel="stylesheet" href="style.css?v=3.5">
 </head>
 <body>
 
@@ -31,12 +31,12 @@
             </div>
 
             <div class="header-right">
-                <!-- Meaning Toggle -->
-                <button class="icon-pill-btn active" id="toggleMeaningBtn" title="Toggle Meanings (अर्थ)">
-                    <span>अर्थ</span>
+                <!-- Meaning Language Cycle Toggle (Hindi -> Bengali -> English) -->
+                <button class="icon-pill-btn active" id="toggleMeaningBtn" title="Toggle Meaning Language (अर्थ / ভাবার্থ / Meaning)">
+                    <span id="meaningBtnText">अर्थ</span>
                 </button>
 
-                <!-- Language Selector -->
+                <!-- Script Language Selector -->
                 <select id="languageSelect" class="lang-dropdown" aria-label="Script Language">
                     <option value="auto">Auto (EN)</option>
                     <option value="en">English</option>
@@ -45,7 +45,7 @@
                 </select>
 
                 <!-- Settings Drawer Trigger -->
-                <button class="icon-pill-btn" id="openSettingsBtn" title="Preferences (Font Size & Theme)">
+                <button class="icon-pill-btn" id="openSettingsBtn" title="Preferences (Font Size & Speed)">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"/>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -192,16 +192,17 @@
                         </div>
                     </div>
 
-                    <!-- Audio Speed -->
+                    <!-- Audio Speed with 0.75x, 1.0x, 1.25x, 1.5x -->
                     <div class="setting-row">
                         <div class="setting-info">
-                            <span class="setting-label">Audio Recitation Pace</span>
-                            <span class="setting-desc">Chanting tempo</span>
+                            <span class="setting-label">Chanting Pace & Speed</span>
+                            <span class="setting-desc">Recitation tempo for fast or slow chanting</span>
                         </div>
                         <div class="speed-toggle" id="speedToggle">
                             <button class="speed-pill" data-speed="0.75">0.75x</button>
                             <button class="speed-pill active" data-speed="1.0">1.0x</button>
                             <button class="speed-pill" data-speed="1.25">1.25x</button>
+                            <button class="speed-pill" data-speed="1.5">1.5x</button>
                         </div>
                     </div>
 
@@ -219,8 +220,8 @@
                     <!-- Meaning Toggle inside settings -->
                     <div class="setting-row">
                         <div class="setting-info">
-                            <span class="setting-label">Verse Meanings (भावार्थ)</span>
-                            <span class="setting-desc">Show authentic Hindi & English meaning</span>
+                            <span class="setting-label">Verse Meanings (ভাবার্থ / अर्थ)</span>
+                            <span class="setting-desc">Display authentic explanations</span>
                         </div>
                         <label class="switch-toggle">
                             <input type="checkbox" id="meaningCheckbox" checked>
@@ -294,7 +295,7 @@
         </div>
     </footer>
 
-    <!-- Scripts -->
+    <!-- Scripts in strict dependency order -->
     <script src="js/chalisa-meanings.js"></script>
     <script src="js/chalisa-data.js"></script>
     <script src="js/app.js"></script>
