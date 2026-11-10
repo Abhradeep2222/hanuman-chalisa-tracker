@@ -1,7 +1,6 @@
 /**
  * Complete and Verified Authentic Hanuman Chalisa Text Data
- * Includes Hindi, English Roman transliteration, and Bengali script.
- * Precomputes phonetic keywords for robust continuous audio syncing.
+ * Includes Hindi, English Roman transliteration, Bengali script, and aligned word tokens.
  */
 
 const CHALISA_DATA = {
@@ -20,9 +19,9 @@ const CHALISA_DATA = {
       label: { hi: "प्रारंभिक दोहा", en: "Opening Doha", bn: "প্রারম্ভিক দোহা" },
       lines: [
         {
-          hi: "श्रीगुरु चरन सरोज रज निज मनु मुकुरु सुधारि।",
+          hi: "श्री गुरु चरन सरोज रज निज मनु मुकुरु सुधारि।",
           en: "Shri Guru Charan Saroj Raj Nij Manu Mukuru Sudhari |",
-          bn: "শ্রীগুরু চরণ সরোজ রজ নিজ মনু মুকুর সুধারি।"
+          bn: "শ্রী গুরু চরণ সরোজ রজ নিজ মনু মুকুর সুধারি।"
         },
         {
           hi: "बरनउँ रघुबर बिमल जसु जो दायकु फल चारि॥",
@@ -153,9 +152,9 @@ const CHALISA_DATA = {
       label: { hi: "चौपाई", en: "Chaupai", bn: "চৌপাঈ" },
       lines: [
         {
-          hi: "शंकर सुवन केसरीनंदन।",
+          hi: "शंकर सुवन केसरी नंदन।",
           en: "Shankar Suwan Kesari Nandan |",
-          bn: "শঙ্কর সুবন কেশরীনন্দন।"
+          bn: "শঙ্কর সুবন কেশরী নন্দন।"
         },
         {
           hi: "तेज प्रताप महा जग बंदन॥",
@@ -253,9 +252,9 @@ const CHALISA_DATA = {
           bn: "লায় সজীবন লখন জিয়ায়ৈ।"
         },
         {
-          hi: "श्रीरघुबीर हरषि उर लाये॥",
+          hi: "श्री रघुबीर हरषि उर लाये॥",
           en: "Shri Raghubir Harashi Ur Laye ||",
-          bn: "শ্রীরঘুবীর হরষি উর লায়ৈ॥"
+          bn: "শ্রী রঘুবীর হরষি উর লায়ৈ॥"
         }
       ]
     },
@@ -837,12 +836,12 @@ const CHALISA_DATA = {
  */
 const SCRIPT_TO_LATIN = {
   'অ':'a','আ':'a','ই':'i','ঈ':'i','উ':'u','ঊ':'u','ঋ':'ri','এ':'e','ঐ':'ai','ও':'o','ঔ':'au',
-  'ক':'k','খ':'kh','গ':'g','ঘ':'gh','ঙ':'ng',
+  'ক':'k','খ':'kh','গ':'g','घ':'gh','ঙ':'ng',
   'চ':'ch','ছ':'chh','জ':'j','ঝ':'jh','ঞ':'n',
   'ট':'t','ঠ':'th','ড':'d','ঢ':'dh','ণ':'n',
-  'ত':'t','थ':'th','দ':'d','ধ':'dh','ন':'n',
+  'ত':'t','थ':'th','দ':'d','ध':'dh','ন':'n',
   'প':'p','ফ':'ph','ব':'b','ভ':'bh','ম':'m',
-  'য':'y','র':'r','ল':'l','শ':'sh','ষ':'sh','স':'s','হ':'h',
+  'য':'y','র':'r','ল':'l','শ':'sh','ष':'sh','স':'s','হ':'h',
   'ড়':'r','ঢ়':'rh','য়':'y','ৎ':'t','ং':'ng','ঃ':'h','ঁ':'n',
   'া':'a','ি':'i','ী':'i','ু':'u','ূ':'u','ৃ':'ri','ে':'e','ৈ':'ai','ো':'o','ৌ':'au','্':'',
   // Devanagari
@@ -863,47 +862,60 @@ function scriptToPhonetic(str) {
   for (let ch of str) {
     out += SCRIPT_TO_LATIN[ch] !== undefined ? SCRIPT_TO_LATIN[ch] : ch;
   }
-  return out.toLowerCase().replace(/[^a-z0-9\s]/g, '');
+  return out.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-/**
- * Phonetic skeleton: Collapses vowel differences and duplicates for ultra-fuzzy matching
- * E.g., "hanuman" -> "hnmn", "gyan" -> "gn", "charan" -> "chrn"
- */
 function phoneticSkeleton(str) {
   if (!str) return '';
-  const latin = scriptToPhonetic(str);
-  return latin
-    .replace(/[aeiouy]/g, '')
-    .replace(/(.)\1+/g, '$1') // remove repeat chars
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim();
+  let s = scriptToPhonetic(str);
+  s = s.replace(/sh/g, 's')
+       .replace(/chh/g, 'ch')
+       .replace(/kh/g, 'k')
+       .replace(/gh/g, 'g')
+       .replace(/bh/g, 'b')
+       .replace(/dh/g, 'd')
+       .replace(/th/g, 't')
+       .replace(/ph/g, 'p')
+       .replace(/v/g, 'b')
+       .replace(/w/g, 'b')
+       .replace(/jn/g, 'gn')
+       .replace(/gy/g, 'gn');
+  const noVowels = s.replace(/[aeiouy]/g, '').replace(/(.)+/g, '');
+  return noVowels.length >= 2 ? noVowels : s;
 }
 
-/**
- * Helper: Flatten all verses into a linear array of lines with keywords pre-computed
- */
 function getFlatLines() {
   const lines = [];
   let index = 0;
   
   CHALISA_DATA.verses.forEach((verse, vIdx) => {
+    const meaning = (typeof CHALISA_MEANINGS !== 'undefined' && CHALISA_MEANINGS[vIdx]) ? CHALISA_MEANINGS[vIdx] : null;
+
     verse.lines.forEach((line, lIdx) => {
       const cleanHi = line.hi.replace(/[।॥]/g, '').trim();
       const cleanEn = line.en.replace(/[|]/g, '').trim();
       const cleanBn = line.bn.replace(/[।॥]/g, '').trim();
 
-      // Extract key signature words (>2 letters)
-      const hiWords = cleanHi.split(/\s+/).filter(w => w.length >= 2);
-      const enWords = cleanEn.split(/\s+/).filter(w => w.length >= 3);
-      const bnWords = cleanBn.split(/\s+/).filter(w => w.length >= 2);
+      const hiWords = cleanHi.split(/\s+/);
+      const enWords = cleanEn.split(/\s+/);
+      const bnWords = cleanBn.split(/\s+/);
 
-      // Skeletons
-      const skeletons = [
-        ...enWords.map(w => phoneticSkeleton(w)),
-        ...hiWords.map(w => phoneticSkeleton(w)),
-        ...bnWords.map(w => phoneticSkeleton(w))
-      ].filter(s => s.length >= 2);
+      const maxLen = Math.max(hiWords.length, enWords.length, bnWords.length);
+      const wordTokens = [];
+
+      for (let w = 0; w < maxLen; w++) {
+        const hw = hiWords[w] || '';
+        const ew = enWords[w] || '';
+        const bw = bnWords[w] || '';
+        wordTokens.push({
+          idx: w,
+          hi: hw,
+          en: ew,
+          bn: bw,
+          phonetic: scriptToPhonetic(hw || ew),
+          skeleton: phoneticSkeleton(hw || ew)
+        });
+      }
 
       lines.push({
         index: index++,
@@ -920,9 +932,20 @@ function getFlatLines() {
         cleanEn: cleanEn.toLowerCase(),
         cleanHi: cleanHi,
         cleanBn: cleanBn,
-        skeletons: Array.from(new Set(skeletons))
+        meaning: meaning,
+        wordTokens: wordTokens
       });
     });
   });
   return lines;
+}
+
+if (typeof window !== 'undefined') {
+  window.CHALISA_DATA = CHALISA_DATA;
+  window.scriptToPhonetic = scriptToPhonetic;
+  window.phoneticSkeleton = phoneticSkeleton;
+  window.getFlatLines = getFlatLines;
+}
+if (typeof module !== 'undefined') {
+  module.exports = { CHALISA_DATA, scriptToPhonetic, phoneticSkeleton, getFlatLines };
 }
