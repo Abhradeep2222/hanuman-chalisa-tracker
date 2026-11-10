@@ -41,7 +41,7 @@ class HanumanChalisaApp {
     this.speechSynth = window.speechSynthesis || null;
     this.aiKaraokeTimer = null;
 
-    // Web Audio API State
+    // Web Audio API State (Desktop only)
     this.audioCtx = null;
     this.analyser = null;
     this.micStream = null;
@@ -127,9 +127,12 @@ class HanumanChalisaApp {
   }
 
   setupEventListeners() {
-    // 1. Microphone Voice Mode
+    // 1. Microphone Voice Mode (Direct user gesture for mobile security)
     if (this.els.startBtn) {
-      this.els.startBtn.addEventListener('click', () => this.toggleListening());
+      this.els.startBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.toggleListening();
+      });
     }
 
     // 2. Audio Recitation (Listen & Learn)
@@ -160,7 +163,7 @@ class HanumanChalisaApp {
       this.els.languageSelect.addEventListener('change', (e) => this.changeLanguage(e.target.value));
     }
 
-    // Meaning Quick Toggle Button (Cycles: Hindi -> Bengali -> English)
+    // Meaning Quick Toggle Button (Cycles: Hindi -> Bengali -> English -> Off)
     if (this.els.toggleMeaningBtn) {
       this.els.toggleMeaningBtn.addEventListener('click', () => this.cycleMeaningLanguage());
     }
@@ -259,7 +262,6 @@ class HanumanChalisaApp {
   // ==================== Meaning & Language Controls ====================
 
   cycleMeaningLanguage() {
-    // Cycle: hi -> bn -> en -> off -> hi
     if (!this.showMeanings) {
       this.showMeanings = true;
       this.meaningLang = 'hi';
@@ -304,7 +306,6 @@ class HanumanChalisaApp {
     this.language = lang;
     localStorage.setItem('hc_lang', lang);
 
-    // Auto align meaning language if user selects Bengali
     if (lang === 'bn') {
       this.meaningLang = 'bn';
       localStorage.setItem('hc_meaningLang', 'bn');
@@ -563,7 +564,7 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== MODE 1: Mobile-Optimized Speech Recognition ====================
+  // ==================== MODE 1: Fresh-Instance Mobile Speech Engine ====================
 
   toggleListening() {
     if (this.isListening) {
@@ -571,6 +572,65 @@ class HanumanChalisaApp {
     } else {
       this.startListening();
     }
+  }
+
+  createFreshRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return null;
+
+    const rec = new SpeechRecognition();
+    // Continuous works on desktop; on mobile we use restart loop
+    rec.continuous = !this.isMobile;
+    rec.interimResults = true;
+    rec.maxAlternatives = 3;
+    rec.lang = this.language === 'bn' ? 'bn-IN' : 'hi-IN';
+
+    rec.onstart = () => {
+      this.els.micDot.classList.add('live');
+      this.els.micLabel.textContent = 'Mic Active';
+      this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
+    };
+
+    rec.onresult = (event) => {
+      let fullTranscript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript + ' ';
+      }
+
+      const heard = fullTranscript.trim();
+      if (heard) {
+        this.pulseEqualizerBars();
+        this.els.transcriptText.textContent = `Heard: "${heard.slice(-45)}"`;
+        this.matchSpokenSpeech(heard);
+      }
+    };
+
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech') return;
+      console.warn('Speech error:', e.error);
+      if (e.error === 'not-allowed') {
+        alert('Microphone permission was denied. Please allow microphone access in your browser settings.');
+        this.stopListening();
+      }
+    };
+
+    rec.onend = () => {
+      // Create a FRESH instance to prevent InvalidStateError on Android & iOS
+      if (this.isListening) {
+        setTimeout(() => {
+          if (this.isListening) {
+            try {
+              this.recognition = this.createFreshRecognition();
+              if (this.recognition) this.recognition.start();
+            } catch (err) {
+              console.warn('Auto-restart exception:', err);
+            }
+          }
+        }, 80);
+      }
+    };
+
+    return rec;
   }
 
   startListening() {
@@ -584,65 +644,20 @@ class HanumanChalisaApp {
       this.stopAiRecitation();
     }
 
-    this.recognition = new SpeechRecognition();
-
-    // On mobile Android/iOS, continuous can cause immediate stall; handle with restart loop
-    this.recognition.continuous = !this.isMobile;
-    this.recognition.interimResults = true;
-    this.recognition.maxAlternatives = 2;
-
-    // Use Indian acoustic model
-    this.recognition.lang = this.language === 'bn' ? 'bn-IN' : 'hi-IN';
-
-    this.recognition.onstart = () => {
-      this.els.micDot.classList.add('live');
-      this.els.micLabel.textContent = 'Mic Active';
-      this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
-      this.startEqualizerAnimation();
-    };
-
-    this.recognition.onresult = (event) => {
-      let interim = '';
-      let final = '';
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const text = event.results[i][0].transcript;
-        if (event.results[i].isFinal) final += text + ' ';
-        else interim += text + ' ';
-      }
-
-      const heard = (final || interim).trim();
-      if (heard) {
-        this.pulseEqualizerBars();
-        this.els.transcriptText.textContent = `Heard: "${heard}"`;
-        this.matchSpokenSpeech(heard);
-      }
-    };
-
-    this.recognition.onerror = (e) => {
-      if (e.error === 'no-speech') return;
-      console.warn('Speech status:', e.error);
-    };
-
-    this.recognition.onend = () => {
-      if (this.isListening) {
-        // Instant restart loop for continuous mobile chanting
-        setTimeout(() => {
-          if (this.isListening && this.recognition) {
-            try { this.recognition.start(); } catch (err) {}
-          }
-        }, 80);
-      }
-    };
-
     this.isListening = true;
     this.els.startBtn.classList.add('listening');
     this.els.startBtnText.textContent = 'Stop Voice';
 
     try {
-      this.recognition.start();
-    } catch (err) {}
+      this.recognition = this.createFreshRecognition();
+      if (this.recognition) {
+        this.recognition.start();
+      }
+    } catch (err) {
+      console.warn('Recognition start exception:', err);
+    }
 
+    this.startEqualizerAnimation();
     this.highlightCurrentLine(true);
   }
 
@@ -664,7 +679,7 @@ class HanumanChalisaApp {
   // ==================== Equalizer Animation (Zero Hardware Lock) ====================
 
   startEqualizerAnimation() {
-    // If not mobile, we can also tap Web Audio API if permitted
+    // Desktop only Web Audio analyser (avoids microphone hardware lock on mobile)
     if (!this.isMobile && !this.audioCtx) {
       try {
         const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -694,13 +709,6 @@ class HanumanChalisaApp {
           drawBars();
         }).catch(() => {});
       } catch (e) {}
-    } else {
-      // Mobile-friendly simulation loop that does NOT lock the hardware mic
-      const pulseLoop = () => {
-        if (!this.isListening) return;
-        this.animFrameId = setTimeout(pulseLoop, 150);
-      };
-      pulseLoop();
     }
   }
 
@@ -714,13 +722,12 @@ class HanumanChalisaApp {
       if (this.els.eqBars) {
         this.els.eqBars.forEach(b => b.style.height = '3px');
       }
-    }, 200);
+    }, 220);
   }
 
   stopEqualizerAnimation() {
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
-      clearTimeout(this.animFrameId);
       this.animFrameId = null;
     }
     if (this.micStream) {
@@ -736,7 +743,7 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== Awadhi-to-Hindi Speech Matcher ====================
+  // ==================== Awadhi-to-Hindi Speech Matcher (Fast & Slow Chanting) ====================
 
   matchSpokenSpeech(spokenString) {
     if (this.currentLineIndex >= this.totalLines) return;
@@ -771,7 +778,10 @@ class HanumanChalisaApp {
         const isPhonetic = sw.phonetic.length >= 2 && target.phonetic.length >= 2 &&
                            (sw.phonetic.includes(target.phonetic) || target.phonetic.includes(sw.phonetic));
 
-        if (isExact || isSkeleton || isPhonetic) {
+        // Prefix match for slow or soft chanting ("dhire se bolna")
+        const isPrefix = sw.phonetic.length >= 2 && target.phonetic.startsWith(sw.phonetic);
+
+        if (isExact || isSkeleton || isPhonetic || isPrefix) {
           const skipped = tIdx - this.currentWordIdx;
           if (skipped > 0) {
             this.totalAttemptedWords += skipped;
@@ -797,7 +807,7 @@ class HanumanChalisaApp {
       this.calculateRealtimeAccuracy();
     }
 
-    // Line completion
+    // Line completion: all words chanted or at least 75%
     if (this.currentWordIdx >= targetTokens.length || (targetTokens.length >= 4 && this.currentWordIdx >= Math.ceil(targetTokens.length * 0.75))) {
       this.completeCurrentLine();
     }
