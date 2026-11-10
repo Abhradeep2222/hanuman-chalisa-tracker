@@ -1,0 +1,11 @@
+{
+  "appId": "com.abhradeep.hanumanchalisa",
+  "appName": "Shri Hanuman Chalisa",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

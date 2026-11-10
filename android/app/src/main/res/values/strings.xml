@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Shri Hanuman Chalisa</string>
+    <string name="title_activity_main">Shri Hanuman Chalisa</string>
+    <string name="package_name">com.abhradeep.hanumanchalisa</string>
+    <string name="custom_url_scheme">com.abhradeep.hanumanchalisa</string>
+</resources>
