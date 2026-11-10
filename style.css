@@ -467,11 +467,21 @@ body {
 
 .word-span {
   display: inline;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  padding: 1px 2px;
+  border-radius: 3px;
 }
 
 .word-span.matched-word {
-  color: var(--accent-base) !important;
+  color: #10B981 !important; /* Bright Emerald Green */
+  background-color: rgba(16, 185, 129, 0.18);
   font-weight: 700;
+  text-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+}
+
+.chalisa-line.current .word-span.matched-word {
+  color: #00E676 !important; /* High contrast neon green for current active line */
+  background-color: rgba(0, 230, 118, 0.22);
 }
 
 .chalisa-line.matched {

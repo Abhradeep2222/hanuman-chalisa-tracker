@@ -1,6 +1,7 @@
 /**
  * Hanuman Chalisa Chant Tracker - Highly Robust Audio Sync Engine
- * Multi-layer Fuzzy Token & Skeleton Matching with Adaptive Fallback
+ * Real-time word-by-word visual green glow on matching speech.
+ * Ignores irrelevant words & advances smoothly as user recites.
  */
 
 class HanumanChalisaApp {
@@ -298,6 +299,10 @@ class HanumanChalisaApp {
       const el = document.getElementById(`line-${i}`);
       if (el) {
         el.className = 'chalisa-line ' + (i < this.currentLineIndex ? 'matched' : (i === this.currentLineIndex ? 'current' : 'upcoming'));
+        // Clear word highlights for future lines
+        if (i >= this.currentLineIndex) {
+          el.querySelectorAll('.word-span').forEach(sp => sp.classList.remove('matched-word'));
+        }
       }
     }
 
@@ -320,7 +325,7 @@ class HanumanChalisaApp {
     if (this.language === 'bn') {
       this.recognition.lang = 'bn-IN';
     } else if (this.language === 'en') {
-      this.recognition.lang = 'en-IN'; // en-IN handles Indian phonetics 10x better than en-US
+      this.recognition.lang = 'en-IN';
     } else {
       this.recognition.lang = 'hi-IN';
     }
@@ -423,7 +428,7 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== Robust Multi-Layer Audio Matching ====================
+  // ==================== Real-Time Word & Line Audio Matching ====================
 
   matchSpokenText(spokenText, allTranscripts, isFinal) {
     if (this.currentLineIndex >= this.totalLines) return;
@@ -445,7 +450,13 @@ class HanumanChalisaApp {
       });
     });
 
-    const lookAhead = 3; // Check current line, next line, and line after
+    const currentLine = this.lines[this.currentLineIndex];
+
+    // 1. Check current line word-by-word and immediately turn matching words GREEN!
+    this.highlightMatchedWords(this.currentLineIndex, currentLine, spokenTokens, spokenSkeletons);
+
+    // 2. Evaluate if current line or next line is satisfied
+    const lookAhead = 3;
     let bestMatch = { index: -1, score: 0 };
 
     for (let offset = 0; offset < lookAhead; offset++) {
@@ -460,17 +471,22 @@ class HanumanChalisaApp {
       }
     }
 
-    // Adaptive acceptance threshold:
-    // If user recites even 2-3 signature words correctly, advance immediately!
+    // Advance if matching threshold reached:
+    // (If 30%+ of line's keywords are heard, or current line words are largely matched)
+    const displayWordsCount = (this.language === 'hi' ? currentLine.hi : (this.language === 'bn' ? currentLine.bn : currentLine.en)).split(' ').length;
+    const currentLineWordRatio = displayWordsCount > 0 ? (this.matchedWordsInCurrentLine.size / displayWordsCount) : 0;
+
     const threshold = isFinal ? 0.28 : 0.38;
 
-    if (bestMatch.score >= threshold && bestMatch.index >= 0) {
-      for (let i = this.currentLineIndex; i <= bestMatch.index; i++) {
-        const s = (i === bestMatch.index) ? Math.max(0.75, bestMatch.score) : 0.85;
+    if ((bestMatch.score >= threshold && bestMatch.index >= 0) || currentLineWordRatio >= 0.45) {
+      const targetIndex = bestMatch.index >= this.currentLineIndex ? bestMatch.index : this.currentLineIndex;
+
+      for (let i = this.currentLineIndex; i <= targetIndex; i++) {
+        const s = (i === targetIndex) ? Math.max(0.75, bestMatch.score, currentLineWordRatio) : 0.85;
         this.markLineCompleteFast(i, s);
       }
 
-      this.currentLineIndex = bestMatch.index + 1;
+      this.currentLineIndex = targetIndex + 1;
       localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
       this.matchedWordsInCurrentLine.clear();
 
@@ -484,11 +500,53 @@ class HanumanChalisaApp {
     }
   }
 
+  highlightMatchedWords(lineIdx, line, spokenTokens, spokenSkeletons) {
+    const lineEl = document.getElementById(`line-${lineIdx}`);
+    if (!lineEl) return;
+
+    const displayLang = this.language === 'auto' ? 'en' : this.language;
+    const fullText = displayLang === 'hi' ? line.hi : (displayLang === 'bn' ? line.bn : line.en);
+    const words = fullText.split(' ');
+
+    words.forEach((word, wIdx) => {
+      const cleanW = this.normalize(word);
+      const wSkel = this.skeleton(word);
+      if (cleanW.length < 2 && wSkel.length < 2) return;
+
+      let isMatch = false;
+
+      // Exact or prefix token match
+      for (const tok of spokenTokens) {
+        if (tok === cleanW || (tok.length >= 4 && cleanW.startsWith(tok)) || (cleanW.length >= 4 && tok.startsWith(cleanW))) {
+          isMatch = true;
+          break;
+        }
+      }
+
+      // Phonetic skeleton match (works across Bengali, Hindi, English transliteration)
+      if (!isMatch && wSkel.length >= 2) {
+        for (const spSk of spokenSkeletons) {
+          if (spSk.length >= 2 && (wSkel === spSk || wSkel.includes(spSk) || spSk.includes(wSkel))) {
+            isMatch = true;
+            break;
+          }
+        }
+      }
+
+      if (isMatch) {
+        this.matchedWordsInCurrentLine.add(wIdx);
+        const span = lineEl.querySelector(`.word-span[data-word-idx="${wIdx}"]`);
+        if (span) {
+          span.classList.add('matched-word');
+        }
+      }
+    });
+  }
+
   evaluateLineMatch(spokenTokens, spokenSkeletons, line) {
     let matchedKeywords = 0;
     const lineSkeletons = line.skeletons || [];
 
-    // Check skeleton overlaps (e.g. "hnmn" vs "hnmn", "sgr" vs "sgr")
     for (const sk of lineSkeletons) {
       if (sk.length < 2) continue;
       for (const spSk of spokenSkeletons) {
@@ -499,7 +557,6 @@ class HanumanChalisaApp {
       }
     }
 
-    // Check token overlap against English, Hindi, Bengali words
     const refWords = line.cleanEn.split(/\s+/);
     let matchedRefWords = 0;
     for (const rw of refWords) {
@@ -539,6 +596,7 @@ class HanumanChalisaApp {
     if (!el) return;
 
     el.className = 'chalisa-line matched';
+    el.querySelectorAll('.word-span').forEach(sp => sp.classList.add('matched-word'));
     this.lineAccuracies[index] = similarity;
 
     let badge = el.querySelector('.line-accuracy');
