@@ -325,7 +325,28 @@ body {
   background: var(--accent-base);
   color: #FFFFFF;
   flex: 1 1 auto;
-  max-width: 240px;
+}
+
+.ai-voice-cta {
+  background: linear-gradient(135deg, #0284C7, #0369A1);
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.15);
+  flex: 0 0 auto;
+}
+
+.ai-voice-cta:hover {
+  background: linear-gradient(135deg, #0369A1, #075985);
+}
+
+.ai-voice-cta.playing {
+  background: #10B981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.5);
+  animation: pulse-ring 1.8s infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
 }
 
 .primary-cta:hover {

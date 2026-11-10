@@ -20,7 +20,12 @@ class HanumanChalisaApp {
     }
 
     this.isListening = false;
+    this.isAiChanting = false;
+    this.speechSynth = window.speechSynthesis || null;
     this.recognition = null;
+    this.audioContext = null;
+    this.analyser = null;
+    this.micStream = null;
     this.lineAccuracies = [];
     this.matchedWordsInCurrentLine = new Set();
     this.recognitionRestartTimeout = null;
@@ -37,6 +42,8 @@ class HanumanChalisaApp {
       themeToggle: document.getElementById('themeToggle'),
       startBtn: document.getElementById('startBtn'),
       startBtnText: document.getElementById('startBtnText'),
+      aiAutoChantBtn: document.getElementById('aiAutoChantBtn'),
+      aiAutoChantText: document.getElementById('aiAutoChantText'),
       resetBtn: document.getElementById('resetBtn'),
       chantCount: document.getElementById('chantCount'),
       accuracyScore: document.getElementById('accuracyScore'),
@@ -95,6 +102,9 @@ class HanumanChalisaApp {
 
   setupEventListeners() {
     this.els.startBtn.addEventListener('click', () => this.toggleListening());
+    if (this.els.aiAutoChantBtn) {
+      this.els.aiAutoChantBtn.addEventListener('click', () => this.toggleAiRecitation());
+    }
     this.els.resetBtn.addEventListener('click', () => this.resetSession());
 
     this.els.languageSelect.addEventListener('change', (e) => {
@@ -311,7 +321,114 @@ class HanumanChalisaApp {
     this.updateProgress();
   }
 
-  // ==================== High-Reliability Speech Engine ====================
+  // ==================== AI Vocal Audio Chanting Engine ====================
+
+  toggleAiRecitation() {
+    if (this.isAiChanting) {
+      this.stopAiRecitation();
+    } else {
+      this.startAiRecitation();
+    }
+  }
+
+  startAiRecitation() {
+    if (!this.speechSynth) {
+      alert('Speech Synthesis is not supported in this browser.');
+      return;
+    }
+
+    if (this.isListening) {
+      this.stopListening();
+    }
+
+    this.isAiChanting = true;
+    if (this.els.aiAutoChantBtn) {
+      this.els.aiAutoChantBtn.classList.add('playing');
+      this.els.aiAutoChantText.textContent = 'Pause AI Reciter';
+    }
+
+    this.els.micDot.classList.add('active');
+    this.els.micLabel.textContent = 'AI Chanting Active';
+    this.reciteCurrentLineWithAI();
+  }
+
+  stopAiRecitation() {
+    this.isAiChanting = false;
+    if (this.speechSynth) {
+      this.speechSynth.cancel();
+    }
+
+    if (this.els.aiAutoChantBtn) {
+      this.els.aiAutoChantBtn.classList.remove('playing');
+      this.els.aiAutoChantText.textContent = 'AI Audio Reciter';
+    }
+
+    this.els.micDot.classList.remove('active');
+    this.els.micLabel.textContent = 'Microphone Inactive';
+  }
+
+  reciteCurrentLineWithAI() {
+    if (!this.isAiChanting || this.currentLineIndex >= this.totalLines) {
+      if (this.currentLineIndex >= this.totalLines) {
+        this.handleCompletion();
+      }
+      this.stopAiRecitation();
+      return;
+    }
+
+    const currentLine = this.lines[this.currentLineIndex];
+    const displayLang = this.language === 'auto' ? 'en' : this.language;
+    const textToRecite = displayLang === 'bn' ? currentLine.bn : currentLine.hi;
+    const fullText = displayLang === 'hi' ? currentLine.hi : (displayLang === 'bn' ? currentLine.bn : currentLine.en);
+    const words = fullText.split(' ');
+    const lineEl = document.getElementById(`line-${this.currentLineIndex}`);
+
+    this.speechSynth.cancel(); // clear previous speech
+    const utter = new SpeechSynthesisUtterance(textToRecite);
+    utter.rate = 0.85; // serene devotional pace
+    utter.pitch = 1.0;
+    utter.lang = displayLang === 'bn' ? 'bn-IN' : 'hi-IN';
+
+    this.els.transcriptText.innerHTML = `AI Reciting: <span class="final">${textToRecite}</span>`;
+
+    // Real-time word-by-word green highlighting as AI recites
+    let wordIndex = 0;
+    utter.onboundary = (event) => {
+      if (event.name === 'word' && wordIndex < words.length) {
+        this.matchedWordsInCurrentLine.add(wordIndex);
+        if (lineEl) {
+          const span = lineEl.querySelector(`.word-span[data-word-idx="${wordIndex}"]`);
+          if (span) span.classList.add('matched-word');
+        }
+        wordIndex++;
+      }
+    };
+
+    utter.onend = () => {
+      if (!this.isAiChanting) return;
+      this.markLineCompleteFast(this.currentLineIndex, 1.0);
+      this.currentLineIndex++;
+      localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
+      this.matchedWordsInCurrentLine.clear();
+
+      this.highlightCurrentLine(true);
+      this.updateProgress();
+      this.updateAccuracy();
+
+      // Proceed to next line after brief devotional pause
+      setTimeout(() => {
+        if (this.isAiChanting) {
+          this.reciteCurrentLineWithAI();
+        }
+      }, 400);
+    };
+
+    utter.onerror = () => {
+      this.stopAiRecitation();
+    };
+
+    this.speechSynth.speak(utter);
+  }
 
   setupRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
