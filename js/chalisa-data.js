@@ -1,12 +1,7 @@
 /**
  * Complete and Verified Authentic Hanuman Chalisa Text Data
- * Accurate Hindi (Awadhi Devanagari), Authentic Bengali Script, and English Transliteration.
- * 
- * Total Verses:
- * - Opening Doha: 2
- * - Chaupai: 40 (numbered 1 to 40)
- * - Ending Doha: 1
- * Total = 43 Verses (86 Lines)
+ * Includes Hindi, English Roman transliteration, and Bengali script.
+ * Precomputes phonetic keywords for robust continuous audio syncing.
  */
 
 const CHALISA_DATA = {
@@ -174,7 +169,7 @@ const CHALISA_DATA = {
       type: "chaupai",
       num: 7,
       totalOfCategory: 40,
-      label: { hi: "चौपाई", en: "Chaupai", bn: "চৌপাঈ" },
+      label: { hi: "चौपाई", en: "Chaupai", bn: "চৌपाঈ" },
       lines: [
         {
           hi: "विद्यावान गुनी अति चातुर।",
@@ -872,7 +867,21 @@ function scriptToPhonetic(str) {
 }
 
 /**
- * Helper: Flatten all verses into a linear array of lines with accurate categorization
+ * Phonetic skeleton: Collapses vowel differences and duplicates for ultra-fuzzy matching
+ * E.g., "hanuman" -> "hnmn", "gyan" -> "gn", "charan" -> "chrn"
+ */
+function phoneticSkeleton(str) {
+  if (!str) return '';
+  const latin = scriptToPhonetic(str);
+  return latin
+    .replace(/[aeiouy]/g, '')
+    .replace(/(.)\1+/g, '$1') // remove repeat chars
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim();
+}
+
+/**
+ * Helper: Flatten all verses into a linear array of lines with keywords pre-computed
  */
 function getFlatLines() {
   const lines = [];
@@ -880,6 +889,22 @@ function getFlatLines() {
   
   CHALISA_DATA.verses.forEach((verse, vIdx) => {
     verse.lines.forEach((line, lIdx) => {
+      const cleanHi = line.hi.replace(/[।॥]/g, '').trim();
+      const cleanEn = line.en.replace(/[|]/g, '').trim();
+      const cleanBn = line.bn.replace(/[।॥]/g, '').trim();
+
+      // Extract key signature words (>2 letters)
+      const hiWords = cleanHi.split(/\s+/).filter(w => w.length >= 2);
+      const enWords = cleanEn.split(/\s+/).filter(w => w.length >= 3);
+      const bnWords = cleanBn.split(/\s+/).filter(w => w.length >= 2);
+
+      // Skeletons
+      const skeletons = [
+        ...enWords.map(w => phoneticSkeleton(w)),
+        ...hiWords.map(w => phoneticSkeleton(w)),
+        ...bnWords.map(w => phoneticSkeleton(w))
+      ].filter(s => s.length >= 2);
+
       lines.push({
         index: index++,
         lineInVerse: lIdx + 1,
@@ -892,7 +917,10 @@ function getFlatLines() {
         hi: line.hi,
         en: line.en,
         bn: line.bn,
-        phonetic: scriptToPhonetic(line.hi) + ' ' + scriptToPhonetic(line.bn) + ' ' + line.en.toLowerCase()
+        cleanEn: cleanEn.toLowerCase(),
+        cleanHi: cleanHi,
+        cleanBn: cleanBn,
+        skeletons: Array.from(new Set(skeletons))
       });
     });
   });

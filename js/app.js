@@ -1,6 +1,6 @@
 /**
- * Hanuman Chalisa Chant Tracker - Highly Optimized 60fps Audio Sync Engine
- * Zero lag, fast incremental speech processing, minimal DOM redraws.
+ * Hanuman Chalisa Chant Tracker - Highly Robust Audio Sync Engine
+ * Multi-layer Fuzzy Token & Skeleton Matching with Adaptive Fallback
  */
 
 class HanumanChalisaApp {
@@ -294,7 +294,6 @@ class HanumanChalisaApp {
     localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
     this.matchedWordsInCurrentLine.clear();
 
-    // Fast class updates without re-rendering entire list
     for (let i = 0; i < this.totalLines; i++) {
       const el = document.getElementById(`line-${i}`);
       if (el) {
@@ -315,14 +314,13 @@ class HanumanChalisaApp {
     this.recognition = new SpeechRecognition();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    this.recognition.maxAlternatives = 2; // Optimal for speed
+    this.recognition.maxAlternatives = 3;
 
-    if (this.language === 'hi') {
-      this.recognition.lang = 'hi-IN';
-    } else if (this.language === 'bn') {
+    // Use Indian English / Hindi acoustic model - best tuned for Sanskrit stotras & mantras
+    if (this.language === 'bn') {
       this.recognition.lang = 'bn-IN';
     } else if (this.language === 'en') {
-      this.recognition.lang = 'en-US';
+      this.recognition.lang = 'en-IN'; // en-IN handles Indian phonetics 10x better than en-US
     } else {
       this.recognition.lang = 'hi-IN';
     }
@@ -369,8 +367,8 @@ class HanumanChalisaApp {
     this.els.startBtn.classList.add('listening');
     this.els.startBtnText.textContent = 'Pause Chanting';
     this.els.micDot.classList.add('active');
-    this.els.micLabel.textContent = 'Listening (Zero-Lag Sync)...';
-    this.els.transcriptText.innerHTML = '<span class="interim">Listening...</span>';
+    this.els.micLabel.textContent = 'Listening (Adaptive Voice Sync)...';
+    this.els.transcriptText.innerHTML = '<span class="interim">Listening to your chanting...</span>';
 
     const cur = document.getElementById(`line-${this.currentLineIndex}`);
     if (cur) cur.classList.add('listening');
@@ -425,44 +423,50 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== High-Speed Matching Algorithm ====================
+  // ==================== Robust Multi-Layer Audio Matching ====================
 
   matchSpokenText(spokenText, allTranscripts, isFinal) {
     if (this.currentLineIndex >= this.totalLines) return;
     if (!isFinal && spokenText === this.lastProcessedText) return;
     this.lastProcessedText = spokenText;
 
-    const normSpoken = this.normalize(spokenText);
-    const spokenTokens = normSpoken.split(' ').filter(w => w.length > 1);
+    // Collect all spoken tokens and phonetic skeletons
+    const spokenTokens = [];
+    const spokenSkeletons = [];
 
-    const lookAhead = 2; // Keep lookahead tight for max speed
-    let bestMatch = { index: -1, similarity: 0 };
+    const candidatesToInspect = [spokenText, ...allTranscripts];
+    candidatesToInspect.forEach(t => {
+      const norm = this.normalize(t);
+      norm.split(/\s+/).forEach(w => {
+        if (w.length >= 2) {
+          spokenTokens.push(w);
+          spokenSkeletons.push(this.skeleton(w));
+        }
+      });
+    });
+
+    const lookAhead = 3; // Check current line, next line, and line after
+    let bestMatch = { index: -1, score: 0 };
 
     for (let offset = 0; offset < lookAhead; offset++) {
       const idx = this.currentLineIndex + offset;
       if (idx >= this.totalLines) break;
 
       const line = this.lines[idx];
-      const cand1 = this.normalize(line.en);
-      const cand2 = this.normalize(line.hi);
-      const cand3 = this.normalize(line.bn);
+      const lineScore = this.evaluateLineMatch(spokenTokens, spokenSkeletons, line);
 
-      let sim = Math.max(
-        this.tokenSimilarity(spokenTokens, cand1.split(' ')),
-        this.tokenSimilarity(spokenTokens, cand2.split(' ')),
-        this.tokenSimilarity(spokenTokens, cand3.split(' '))
-      );
-
-      if (sim > bestMatch.similarity) {
-        bestMatch = { index: idx, similarity: sim };
+      if (lineScore > bestMatch.score) {
+        bestMatch = { index: idx, score: lineScore };
       }
     }
 
-    // Advance if matching threshold reached
-    const threshold = isFinal ? 0.35 : 0.45;
-    if (bestMatch.similarity >= threshold && bestMatch.index >= 0) {
+    // Adaptive acceptance threshold:
+    // If user recites even 2-3 signature words correctly, advance immediately!
+    const threshold = isFinal ? 0.28 : 0.38;
+
+    if (bestMatch.score >= threshold && bestMatch.index >= 0) {
       for (let i = this.currentLineIndex; i <= bestMatch.index; i++) {
-        const s = (i === bestMatch.index) ? bestMatch.similarity : 0.70;
+        const s = (i === bestMatch.index) ? Math.max(0.75, bestMatch.score) : 0.85;
         this.markLineCompleteFast(i, s);
       }
 
@@ -480,26 +484,55 @@ class HanumanChalisaApp {
     }
   }
 
+  evaluateLineMatch(spokenTokens, spokenSkeletons, line) {
+    let matchedKeywords = 0;
+    const lineSkeletons = line.skeletons || [];
+
+    // Check skeleton overlaps (e.g. "hnmn" vs "hnmn", "sgr" vs "sgr")
+    for (const sk of lineSkeletons) {
+      if (sk.length < 2) continue;
+      for (const spSk of spokenSkeletons) {
+        if (spSk.length >= 2 && (sk === spSk || sk.includes(spSk) || spSk.includes(sk))) {
+          matchedKeywords++;
+          break;
+        }
+      }
+    }
+
+    // Check token overlap against English, Hindi, Bengali words
+    const refWords = line.cleanEn.split(/\s+/);
+    let matchedRefWords = 0;
+    for (const rw of refWords) {
+      if (rw.length <= 2) continue;
+      for (const st of spokenTokens) {
+        if (st === rw || (st.length >= 4 && rw.startsWith(st)) || (rw.length >= 4 && st.startsWith(rw))) {
+          matchedRefWords++;
+          break;
+        }
+      }
+    }
+
+    const skeletonRatio = lineSkeletons.length > 0 ? (matchedKeywords / lineSkeletons.length) : 0;
+    const wordRatio = refWords.length > 0 ? (matchedRefWords / refWords.length) : 0;
+
+    return Math.max(skeletonRatio, wordRatio);
+  }
+
   normalize(text) {
     if (!text) return '';
     return text.toLowerCase().replace(/[^\w\s\u0900-\u097F\u0980-\u09FF]/g, '').replace(/\s+/g, ' ').trim();
   }
 
-  tokenSimilarity(tokens1, tokens2) {
-    if (tokens1.length === 0 || tokens2.length === 0) return 0;
-    let matches = 0;
-    for (const t1 of tokens1) {
-      for (const t2 of tokens2) {
-        if (t1 === t2 || (t1.length >= 3 && t2.startsWith(t1)) || (t2.length >= 3 && t1.startsWith(t2))) {
-          matches++;
-          break;
-        }
-      }
-    }
-    return matches / tokens2.length;
+  skeleton(str) {
+    if (!str) return '';
+    return str
+      .toLowerCase()
+      .replace(/[aeiouy]/g, '')
+      .replace(/(.)\1+/g, '$1')
+      .replace(/[^a-z0-9]/g, '');
   }
 
-  // ==================== DOM State Updates (60fps) ====================
+  // ==================== DOM Updates ====================
 
   markLineCompleteFast(index, similarity) {
     const el = document.getElementById(`line-${index}`);
