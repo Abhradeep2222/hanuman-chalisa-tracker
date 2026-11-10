@@ -1,7 +1,10 @@
 /**
  * Hanuman Chalisa Chant Tracker - Highly Robust Audio Sync Engine
- * Real-time word-by-word visual green glow on matching speech.
- * Ignores irrelevant words & advances smoothly as user recites.
+ * Fixes:
+ * 1. Dual Recognition Engine with aggressive interim results
+ * 2. Visual live text feedback in bottom transcript
+ * 3. Direct fuzzy substring matching against current verse words
+ * 4. Resilient restart handling for Android/iOS mobile Chrome
  */
 
 class HanumanChalisaApp {
@@ -19,9 +22,8 @@ class HanumanChalisaApp {
     this.isListening = false;
     this.recognition = null;
     this.lineAccuracies = [];
-    this.accumulatedTranscript = '';
-    this.lastProcessedText = '';
     this.matchedWordsInCurrentLine = new Set();
+    this.recognitionRestartTimeout = null;
 
     // Stats
     this.chantCount = parseInt(localStorage.getItem('hc_chantCount') || '0', 10);
@@ -160,7 +162,7 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== High Performance Render ====================
+  // ==================== Render Chalisa ====================
 
   renderChalisaFast() {
     const container = this.els.chalisaContainer;
@@ -299,7 +301,6 @@ class HanumanChalisaApp {
       const el = document.getElementById(`line-${i}`);
       if (el) {
         el.className = 'chalisa-line ' + (i < this.currentLineIndex ? 'matched' : (i === this.currentLineIndex ? 'current' : 'upcoming'));
-        // Clear word highlights for future lines
         if (i >= this.currentLineIndex) {
           el.querySelectorAll('.word-span').forEach(sp => sp.classList.remove('matched-word'));
         }
@@ -310,41 +311,54 @@ class HanumanChalisaApp {
     this.updateProgress();
   }
 
-  // ==================== Speech Engine ====================
+  // ==================== High-Reliability Speech Engine ====================
 
   setupRecognition() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
 
+    if (this.recognition) {
+      try { this.recognition.abort(); } catch (e) {}
+      this.recognition = null;
+    }
+
     this.recognition = new SpeechRecognition();
     this.recognition.continuous = true;
     this.recognition.interimResults = true;
-    this.recognition.maxAlternatives = 3;
+    this.recognition.maxAlternatives = 4;
 
-    // Use Indian English / Hindi acoustic model - best tuned for Sanskrit stotras & mantras
+    // Use Indian acoustic model or Bengali if selected
     if (this.language === 'bn') {
       this.recognition.lang = 'bn-IN';
-    } else if (this.language === 'en') {
-      this.recognition.lang = 'en-IN';
     } else {
+      // hi-IN works with both Hindi & Indian Roman pronunciation of Chalisa
       this.recognition.lang = 'hi-IN';
     }
+
+    this.recognition.onstart = () => {
+      this.els.micDot.classList.add('active');
+      this.els.micLabel.textContent = 'Listening (Speak Now)...';
+    };
 
     this.recognition.onresult = (event) => this.handleSpeechResult(event);
 
     this.recognition.onerror = (event) => {
-      if (event.error === 'no-speech' || event.error === 'audio-capture') {
-        if (this.isListening) {
-          setTimeout(() => {
-            try { this.recognition.start(); } catch (e) {}
-          }, 100);
-        }
+      console.log('SpeechRecognition error:', event.error);
+      if (event.error === 'not-allowed') {
+        this.stopListening();
+        alert('Please allow microphone permissions in your mobile browser to enable chanting sync.');
       }
     };
 
     this.recognition.onend = () => {
+      // Continuous listener on mobile browsers: auto restart if active
       if (this.isListening) {
-        try { this.recognition.start(); } catch (e) {}
+        clearTimeout(this.recognitionRestartTimeout);
+        this.recognitionRestartTimeout = setTimeout(() => {
+          if (this.isListening) {
+            try { this.recognition.start(); } catch (e) {}
+          }
+        }, 150);
       }
     };
   }
@@ -362,18 +376,16 @@ class HanumanChalisaApp {
     if (!this.recognition) return;
 
     this.isListening = true;
-    this.accumulatedTranscript = '';
-    this.lastProcessedText = '';
+    this.els.startBtn.classList.add('listening');
+    this.els.startBtnText.textContent = 'Pause Chanting';
+    this.els.micLabel.textContent = 'Connecting Mic...';
+    this.els.transcriptText.innerHTML = '<span class="interim">Say "Shri Guru Charan..." or chant in any language</span>';
 
     try {
       this.recognition.start();
-    } catch (e) {}
-
-    this.els.startBtn.classList.add('listening');
-    this.els.startBtnText.textContent = 'Pause Chanting';
-    this.els.micDot.classList.add('active');
-    this.els.micLabel.textContent = 'Listening (Adaptive Voice Sync)...';
-    this.els.transcriptText.innerHTML = '<span class="interim">Listening to your chanting...</span>';
+    } catch (e) {
+      console.warn('Recognition start error:', e);
+    }
 
     const cur = document.getElementById(`line-${this.currentLineIndex}`);
     if (cur) cur.classList.add('listening');
@@ -381,6 +393,7 @@ class HanumanChalisaApp {
 
   stopListening() {
     this.isListening = false;
+    clearTimeout(this.recognitionRestartTimeout);
 
     if (this.recognition) {
       try { this.recognition.stop(); } catch (e) {}
@@ -398,95 +411,130 @@ class HanumanChalisaApp {
   }
 
   handleSpeechResult(event) {
-    let interimTranscript = '';
-    let finalTranscript = '';
-    const allAlternatives = [];
+    let latestInterim = '';
+    let latestFinal = '';
+    const allTokens = new Set();
 
     for (let i = event.resultIndex; i < event.results.length; i++) {
-      const result = event.results[i];
-      const text = result[0].transcript.trim();
+      const res = event.results[i];
+      const str = res[0].transcript;
 
-      if (result.isFinal) {
-        finalTranscript += text + ' ';
+      if (res.isFinal) {
+        latestFinal += str + ' ';
       } else {
-        interimTranscript += text + ' ';
+        latestInterim += str + ' ';
       }
 
-      for (let j = 0; j < result.length; j++) {
-        allAlternatives.push(result[j].transcript.trim());
+      // Extract all word alternatives from SpeechRecognition
+      for (let j = 0; j < res.length; j++) {
+        const altStr = res[j].transcript;
+        this.extractTokens(altStr).forEach(t => allTokens.add(t));
       }
     }
 
-    finalTranscript = finalTranscript.trim();
-    interimTranscript = interimTranscript.trim();
-
-    this.updateTranscriptDisplay(finalTranscript, interimTranscript);
-
-    const spoken = finalTranscript || interimTranscript;
-    if (spoken.length >= 2) {
-      this.matchSpokenText(spoken, allAlternatives, !!finalTranscript);
+    const speechText = (latestFinal || latestInterim).trim();
+    if (speechText) {
+      // Visually display what microphone heard in bottom HUD
+      this.els.transcriptText.innerHTML = `Heard: <span class="final">${speechText}</span>`;
+      this.processAudioSync(Array.from(allTokens), speechText);
     }
   }
 
-  // ==================== Real-Time Word & Line Audio Matching ====================
+  extractTokens(str) {
+    return str
+      .toLowerCase()
+      .replace(/[^\w\s\u0900-\u097F\u0980-\u09FF]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length >= 2);
+  }
 
-  matchSpokenText(spokenText, allTranscripts, isFinal) {
+  // ==================== Immediate Word-by-Word Matching ====================
+
+  processAudioSync(spokenTokens, rawSpoken) {
     if (this.currentLineIndex >= this.totalLines) return;
-    if (!isFinal && spokenText === this.lastProcessedText) return;
-    this.lastProcessedText = spokenText;
-
-    // Collect all spoken tokens and phonetic skeletons
-    const spokenTokens = [];
-    const spokenSkeletons = [];
-
-    const candidatesToInspect = [spokenText, ...allTranscripts];
-    candidatesToInspect.forEach(t => {
-      const norm = this.normalize(t);
-      norm.split(/\s+/).forEach(w => {
-        if (w.length >= 2) {
-          spokenTokens.push(w);
-          spokenSkeletons.push(this.skeleton(w));
-        }
-      });
-    });
 
     const currentLine = this.lines[this.currentLineIndex];
+    const displayLang = this.language === 'auto' ? 'en' : this.language;
+    const fullText = displayLang === 'hi' ? currentLine.hi : (displayLang === 'bn' ? currentLine.bn : currentLine.en);
+    const displayWords = fullText.split(' ');
+    const lineEl = document.getElementById(`line-${this.currentLineIndex}`);
 
-    // 1. Check current line word-by-word and immediately turn matching words GREEN!
-    this.highlightMatchedWords(this.currentLineIndex, currentLine, spokenTokens, spokenSkeletons);
+    let newlyMatched = 0;
 
-    // 2. Evaluate if current line or next line is satisfied
-    const lookAhead = 3;
-    let bestMatch = { index: -1, score: 0 };
+    // Check every word in the current line
+    displayWords.forEach((targetWord, wIdx) => {
+      if (this.matchedWordsInCurrentLine.has(wIdx)) return;
 
-    for (let offset = 0; offset < lookAhead; offset++) {
-      const idx = this.currentLineIndex + offset;
-      if (idx >= this.totalLines) break;
+      const normTarget = this.cleanWord(targetWord);
+      const skelTarget = this.skeleton(targetWord);
 
-      const line = this.lines[idx];
-      const lineScore = this.evaluateLineMatch(spokenTokens, spokenSkeletons, line);
+      // Check against spoken speech tokens
+      let matched = false;
 
-      if (lineScore > bestMatch.score) {
-        bestMatch = { index: idx, score: lineScore };
+      for (const token of spokenTokens) {
+        const skelToken = this.skeleton(token);
+
+        // 1. Exact or prefix match
+        if (normTarget === token || (token.length >= 4 && normTarget.startsWith(token)) || (normTarget.length >= 4 && token.startsWith(normTarget))) {
+          matched = true;
+          break;
+        }
+
+        // 2. Phonetic Skeleton match (handles accents & transliteration differences)
+        if (skelTarget.length >= 2 && skelToken.length >= 2) {
+          if (skelTarget === skelToken || skelTarget.includes(skelToken) || skelToken.includes(skelTarget)) {
+            matched = true;
+            break;
+          }
+        }
       }
+
+      // 3. Fallback: Raw speech substring match
+      if (!matched && normTarget.length >= 3 && rawSpoken.toLowerCase().includes(normTarget)) {
+        matched = true;
+      }
+
+      if (matched) {
+        this.matchedWordsInCurrentLine.add(wIdx);
+        newlyMatched++;
+
+        // Instantly turn this word Bright Green in DOM!
+        if (lineEl) {
+          const span = lineEl.querySelector(`.word-span[data-word-idx="${wIdx}"]`);
+          if (span) {
+            span.classList.add('matched-word');
+          }
+        }
+      }
+    });
+
+    // Check if line is ready to advance (at least 2 words or 35% of line matched)
+    const totalWords = displayWords.length;
+    const matchRatio = totalWords > 0 ? (this.matchedWordsInCurrentLine.size / totalWords) : 0;
+
+    // Check if user is reciting the NEXT line already (speed chant)
+    const nextLineIdx = this.currentLineIndex + 1;
+    let nextLineMatch = false;
+
+    if (nextLineIdx < this.totalLines) {
+      const nextLine = this.lines[nextLineIdx];
+      const nextSkeletons = nextLine.skeletons || [];
+      let nextHits = 0;
+
+      for (const tok of spokenTokens) {
+        const sk = this.skeleton(tok);
+        if (nextSkeletons.some(ns => ns.length >= 2 && (ns === sk || ns.includes(sk)))) {
+          nextHits++;
+        }
+      }
+      if (nextHits >= 2) nextLineMatch = true;
     }
 
-    // Advance if matching threshold reached:
-    // (If 30%+ of line's keywords are heard, or current line words are largely matched)
-    const displayWordsCount = (this.language === 'hi' ? currentLine.hi : (this.language === 'bn' ? currentLine.bn : currentLine.en)).split(' ').length;
-    const currentLineWordRatio = displayWordsCount > 0 ? (this.matchedWordsInCurrentLine.size / displayWordsCount) : 0;
+    if (matchRatio >= 0.35 || this.matchedWordsInCurrentLine.size >= 2 || nextLineMatch) {
+      // Advance to next line
+      this.markLineCompleteFast(this.currentLineIndex, Math.max(0.75, matchRatio));
 
-    const threshold = isFinal ? 0.28 : 0.38;
-
-    if ((bestMatch.score >= threshold && bestMatch.index >= 0) || currentLineWordRatio >= 0.45) {
-      const targetIndex = bestMatch.index >= this.currentLineIndex ? bestMatch.index : this.currentLineIndex;
-
-      for (let i = this.currentLineIndex; i <= targetIndex; i++) {
-        const s = (i === targetIndex) ? Math.max(0.75, bestMatch.score, currentLineWordRatio) : 0.85;
-        this.markLineCompleteFast(i, s);
-      }
-
-      this.currentLineIndex = targetIndex + 1;
+      this.currentLineIndex = nextLineMatch ? (this.currentLineIndex + 2) : (this.currentLineIndex + 1);
       localStorage.setItem('hc_currentLine', String(this.currentLineIndex));
       this.matchedWordsInCurrentLine.clear();
 
@@ -500,96 +548,37 @@ class HanumanChalisaApp {
     }
   }
 
-  highlightMatchedWords(lineIdx, line, spokenTokens, spokenSkeletons) {
-    const lineEl = document.getElementById(`line-${lineIdx}`);
-    if (!lineEl) return;
-
-    const displayLang = this.language === 'auto' ? 'en' : this.language;
-    const fullText = displayLang === 'hi' ? line.hi : (displayLang === 'bn' ? line.bn : line.en);
-    const words = fullText.split(' ');
-
-    words.forEach((word, wIdx) => {
-      const cleanW = this.normalize(word);
-      const wSkel = this.skeleton(word);
-      if (cleanW.length < 2 && wSkel.length < 2) return;
-
-      let isMatch = false;
-
-      // Exact or prefix token match
-      for (const tok of spokenTokens) {
-        if (tok === cleanW || (tok.length >= 4 && cleanW.startsWith(tok)) || (cleanW.length >= 4 && tok.startsWith(cleanW))) {
-          isMatch = true;
-          break;
-        }
-      }
-
-      // Phonetic skeleton match (works across Bengali, Hindi, English transliteration)
-      if (!isMatch && wSkel.length >= 2) {
-        for (const spSk of spokenSkeletons) {
-          if (spSk.length >= 2 && (wSkel === spSk || wSkel.includes(spSk) || spSk.includes(wSkel))) {
-            isMatch = true;
-            break;
-          }
-        }
-      }
-
-      if (isMatch) {
-        this.matchedWordsInCurrentLine.add(wIdx);
-        const span = lineEl.querySelector(`.word-span[data-word-idx="${wIdx}"]`);
-        if (span) {
-          span.classList.add('matched-word');
-        }
-      }
-    });
-  }
-
-  evaluateLineMatch(spokenTokens, spokenSkeletons, line) {
-    let matchedKeywords = 0;
-    const lineSkeletons = line.skeletons || [];
-
-    for (const sk of lineSkeletons) {
-      if (sk.length < 2) continue;
-      for (const spSk of spokenSkeletons) {
-        if (spSk.length >= 2 && (sk === spSk || sk.includes(spSk) || spSk.includes(sk))) {
-          matchedKeywords++;
-          break;
-        }
-      }
-    }
-
-    const refWords = line.cleanEn.split(/\s+/);
-    let matchedRefWords = 0;
-    for (const rw of refWords) {
-      if (rw.length <= 2) continue;
-      for (const st of spokenTokens) {
-        if (st === rw || (st.length >= 4 && rw.startsWith(st)) || (rw.length >= 4 && st.startsWith(rw))) {
-          matchedRefWords++;
-          break;
-        }
-      }
-    }
-
-    const skeletonRatio = lineSkeletons.length > 0 ? (matchedKeywords / lineSkeletons.length) : 0;
-    const wordRatio = refWords.length > 0 ? (matchedRefWords / refWords.length) : 0;
-
-    return Math.max(skeletonRatio, wordRatio);
-  }
-
-  normalize(text) {
-    if (!text) return '';
-    return text.toLowerCase().replace(/[^\w\s\u0900-\u097F\u0980-\u09FF]/g, '').replace(/\s+/g, ' ').trim();
+  cleanWord(w) {
+    return w.toLowerCase().replace(/[^\w\u0900-\u097F\u0980-\u09FF]/g, '').trim();
   }
 
   skeleton(str) {
     if (!str) return '';
-    return str
+    const SCRIPT_MAP = {
+      'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ऋ':'ri','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
+      'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'ng','च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'n',
+      'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n','त':'t','थ':'th','द':'d','ध':'dh','न':'n',
+      'प':'p','फ':'ph','ब':'b','भ':'bh','म':'m','य':'y','र':'r','ल':'l','व':'v','श':'sh','ष':'sh','स':'s','ह':'h',
+      'অ':'a','আ':'a','ই':'i','ঈ':'i','উ':'u','ঊ':'u','ঋ':'ri','এ':'e','ঐ':'ai','ও':'o','ঔ':'au',
+      'ক':'k','খ':'kh','গ':'g','ঘ':'gh','ঙ':'ng','চ':'ch','ছ':'chh','জ':'j','ঝ':'jh','ঞ':'n',
+      'ট':'t','ঠ':'th','ড':'d','ढ':'dh','ণ':'n','ত':'t','থ':'th','দ':'d','ধ':'dh','ন':'n',
+      'প':'p','ফ':'ph','ব':'b','ভ':'bh','ম':'m','য':'y','র':'r','ল':'l','শ':'sh','ষ':'sh','স':'s','হ':'h',
+      'ড়':'r','ঢ়':'rh','য়':'y'
+    };
+
+    let latin = '';
+    for (const ch of str) {
+      latin += SCRIPT_MAP[ch] !== undefined ? SCRIPT_MAP[ch] : ch;
+    }
+
+    return latin
       .toLowerCase()
       .replace(/[aeiouy]/g, '')
       .replace(/(.)\1+/g, '$1')
       .replace(/[^a-z0-9]/g, '');
   }
 
-  // ==================== DOM Updates ====================
+  // ==================== DOM State Updates ====================
 
   markLineCompleteFast(index, similarity) {
     const el = document.getElementById(`line-${index}`);
@@ -688,22 +677,11 @@ class HanumanChalisaApp {
     this.els.streakCount.innerHTML = `${this.streak} <span class="metric-unit">days</span>`;
   }
 
-  updateTranscriptDisplay(finalText, interimText) {
-    if (finalText) this.accumulatedTranscript += finalText + ' ';
-    const recent = this.accumulatedTranscript.trim().split(' ').slice(-14).join(' ');
-    let html = '';
-    if (recent) html += `<span class="final">${recent}</span> `;
-    if (interimText) html += `<span class="interim">${interimText}</span>`;
-    if (!html) html = '<span class="interim">Listening for recitation...</span>';
-    this.els.transcriptText.innerHTML = html;
-  }
-
   resetSession() {
     this.stopListening();
     this.currentLineIndex = 0;
     localStorage.setItem('hc_currentLine', '0');
     this.lineAccuracies = [];
-    this.accumulatedTranscript = '';
     this.matchedWordsInCurrentLine.clear();
 
     this.renderChalisaFast();
