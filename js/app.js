@@ -65,7 +65,7 @@ const VERSE_TIMESTAMPS = [
 ];
 
 const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25];
-const LANG_NAMES = { 'hi-IN': 'हिन्दी (hi-IN)', 'bn-IN': 'বাংলা (bn-IN)' };
+const LANG_NAMES = { 'hi-IN': 'हिन्दी (hi-IN)', 'bn-IN': 'বাংলা (bn-IN)', 'en-IN': 'English (en-IN)' };
 
 // Safe Storage Helper (private mode / blocked storage must not break the app)
 const safeStorage = {
@@ -173,7 +173,12 @@ class HanumanChalisaEngine {
     this.isVoiceListening = false;
     this.voiceSession = 0;
     this.voice = this.freshVoiceState();
-    this.voiceTiming = { webRestartDelay: 250 };
+    this.voiceTiming = {
+      webRestartDelay: 250,
+      holdReleaseMs: 800,        // a word the recogniser stopped revising counts without waiting for the next
+      lineCloseSilenceMs: 5000,  // silence that closes a line whose last word was never recognised
+      quietHintMs: 7000          // window for the "voice is very soft" hint
+    };
     this.recognition = null;
     this.micStream = null;
     this.micSource = null;
@@ -183,6 +188,7 @@ class HanumanChalisaEngine {
 
     this.wakeLock = null;
     this.wakeLockBusy = false;
+    this.nativeAwake = null;
     this.toastEl = null;
     this.toastTimer = null;
 
@@ -203,7 +209,15 @@ class HanumanChalisaEngine {
       plugin: null,
       lang: null,
       beepMuted: false,    // native: system listening beep muted for the session
+      requestedLang: null, // native: language asked for (the plugin may fall back)
+      routeNotice: false,  // native: a "listening in another language" note is shown
       restartTimer: null,  // web: pending restart
+      holdTimer: null,     // releases a held-back word once the transcript is stable
+      lineCloseTimer: null,// closes a line after silence
+      lastWordAt: 0,
+      levelWindowStart: 0,
+      levelPeak: -2,
+      softHintShown: false,
       errorStreak: 0,
       webRun: 0,
       webKeys: [],
@@ -338,7 +352,8 @@ class HanumanChalisaEngine {
     this.els.loopLabel.textContent = this.isLooping ? 'Loop: ON' : 'Loop: 1x';
     this.els.autoScrollToggle.checked = this.autoScroll;
     this.els.wakeLockToggle.checked = this.keepAwake;
-    if (!('wakeLock' in navigator)) {
+    const nativeAwake = nativeSpeechPlugin();
+    if (!('wakeLock' in navigator) && !(nativeAwake && typeof nativeAwake.keepAwake === 'function')) {
       this.els.wakeLockToggle.disabled = true;
       if (this.els.wakeLockDesc) this.els.wakeLockDesc.textContent = 'Not supported by this browser / WebView';
     }
@@ -799,10 +814,16 @@ class HanumanChalisaEngine {
   // a recogniser competes for the microphone on Android.
 
   getRecognitionLang() {
-    // The verses are Awadhi/Hindi whichever script is on screen, and the Hindi
-    // recogniser transcribes them far better than en-IN. Its Devanagari output
-    // is matched against the English transliteration via phoneticSkeleton().
-    return this.scriptLang === 'bn' ? 'bn-IN' : 'hi-IN';
+    // The verses are Awadhi/Hindi whichever script is on screen. The Hindi
+    // recogniser knows these words (the Chalisa is everywhere in Hindi audio),
+    // it is installed on far more phones than Bengali, and its Devanagari output
+    // is matched against the Bengali and English text via phoneticSkeleton().
+    return 'hi-IN';
+  }
+
+  /** Languages the native recogniser may fall back to if Hindi is unavailable. */
+  recognitionFallbacks() {
+    return this.scriptLang === 'bn' ? ['bn-IN', 'en-IN'] : ['en-IN'];
   }
 
   async toggleVoiceListening() {
@@ -896,11 +917,13 @@ class HanumanChalisaEngine {
     await plugin.addListener('final', (data) => this.onNativeFinal(session, data));
     await plugin.addListener('error', (data) => this.onNativeError(session, data));
     await plugin.addListener('state', (data) => this.onNativeState(session, data));
+    await plugin.addListener('route', (data) => this.onNativeRoute(session, data));
+    await plugin.addListener('level', (data) => this.onNativeLevel(session, data));
     if (!this.isActiveSession(session)) return true;
 
     let started;
     try {
-      started = await plugin.start({ language: lang, muteBeep: true });
+      started = await plugin.start({ language: lang, fallbackLanguages: this.recognitionFallbacks(), muteBeep: true });
     } catch (err) {
       if (!this.isActiveSession(session)) return true;
       if (err && err.code === 'permission') {
@@ -915,7 +938,8 @@ class HanumanChalisaEngine {
     }
     if (!this.isActiveSession(session)) return true;
     v.beepMuted = !!(started && started.beepMuted);
-    this.showVoiceStatus(this.listeningMessage(lang));
+    v.requestedLang = lang;
+    if (!v.routeNotice) this.showVoiceStatus(this.listeningMessage(v.lang));
     return true;
   }
 
@@ -932,16 +956,108 @@ class HanumanChalisaEngine {
     if (!this.isActiveSession(session) || !data || !data.text) return;
     this.voice.errorStreak = 0;
     this.showHeard(data.text);
-    this.processHeardWords(this.feed.update(this.nativeStreamKey(session, data.segment), data.text, false));
+    const key = this.nativeStreamKey(session, data.segment);
+    this.processHeardWords(this.feed.update(key, data.text, false));
+    this.armHoldRelease(key);
   }
 
   /** The utterance ended (sent once, also after silence or an error): release its held-back word. */
   onNativeFinal(session, data) {
     if (!this.isActiveSession(session) || !data) return;
+    clearTimeout(this.voice.holdTimer);
     const key = this.nativeStreamKey(session, data.segment);
     const words = data.text ? this.feed.update(key, data.text, true) : this.feed.flush(key);
     if (data.text) this.showHeard(data.text);
-    this.processHeardWords(words, true);
+    this.processHeardWords(words);
+  }
+
+  /**
+   * Audio level from the native recogniser (Android RMS dB: about -2 in silence,
+   * up to ~10 for a loud voice). Drives the level bars, and tells a soft-voiced
+   * chanter to come closer when the recogniser hears sound but no words.
+   */
+  onNativeLevel(session, data) {
+    if (!this.isActiveSession(session) || !data) return;
+    const rms = Number(data.rms);
+    if (!Number.isFinite(rms)) return;
+    const level = Math.max(0, Math.min(1, (rms + 2) / 12));
+    const bars = this.els.voiceWaveBars.querySelectorAll('.wave-bar');
+    bars.forEach((bar, idx) => {
+      const shape = 0.55 + 0.45 * Math.abs(Math.sin((idx + 1) * 1.7 + Date.now() / 160));
+      bar.style.height = `${Math.max(6, level * shape * 26)}px`;
+    });
+    this.trackVoiceLevel(rms, Date.now());
+  }
+
+  trackVoiceLevel(rms, now) {
+    const v = this.voice;
+    if (!v.levelWindowStart) {
+      v.levelWindowStart = now;
+      v.levelPeak = rms;
+      return;
+    }
+    v.levelPeak = Math.max(v.levelPeak, rms);
+    if (now - v.levelWindowStart < this.voiceTiming.quietHintMs) return;
+    const heardWords = v.lastWordAt >= v.levelWindowStart;
+    // Sound well above silence but too soft for any word to be recognised.
+    if (!heardWords && v.levelPeak > 0.5 && v.levelPeak < 4.5) {
+      this.showVoiceStatus('Your voice is very soft for the microphone. Chant a little louder, or hold the phone closer.');
+      v.softHintShown = true;
+    } else if (heardWords && v.softHintShown) {
+      v.softHintShown = false;
+    }
+    v.levelWindowStart = now;
+    v.levelPeak = rms;
+  }
+
+  /**
+   * Release the held-back last word once the transcript has stopped changing,
+   * so a slow chanter sees each word light up without saying the next one.
+   */
+  armHoldRelease(key) {
+    const v = this.voice;
+    const session = this.voiceSession;
+    clearTimeout(v.holdTimer);
+    v.holdTimer = setTimeout(() => {
+      v.holdTimer = null;
+      if (!this.isActiveSession(session)) return;
+      this.processHeardWords(key ? this.feed.flush(key) : this.feed.flushAll());
+    }, this.voiceTiming.holdReleaseMs);
+  }
+
+  /**
+   * A line whose last word the recogniser never delivered is closed after a
+   * silence; the start of the next line also closes it. An utterance boundary
+   * alone does not: slow chanters pause before the last word.
+   */
+  armLineClose() {
+    const v = this.voice;
+    const session = this.voiceSession;
+    clearTimeout(v.lineCloseTimer);
+    v.lineCloseTimer = setTimeout(() => {
+      v.lineCloseTimer = null;
+      if (!this.isActiveSession(session)) return;
+      const events = this.tracker.endOfUtterance();
+      if (events.length) this.applyTrackerEvents(events);
+    }, this.voiceTiming.lineCloseSilenceMs);
+  }
+
+  /**
+   * The plugin moved to another recogniser or language because the previous one
+   * could not serve (e.g. no Bengali on Samsung's default recogniser). Words are
+   * matched in every script, so a Hindi transcript still tracks the Bengali text.
+   */
+  onNativeRoute(session, data) {
+    if (!this.isActiveSession(session) || !data || !data.language) return;
+    const v = this.voice;
+    const requested = v.requestedLang || v.lang;
+    v.lang = data.language;
+    if (data.language !== requested) {
+      v.routeNotice = true;
+      this.showVoiceStatus(`${LANG_NAMES[requested] || requested} speech recognition is not available on this phone, so AI Voice Sync is listening in ${LANG_NAMES[data.language] || data.language}. Chant as usual: your words still match the verses on screen.`);
+    } else if (!v.routeNotice) {
+      this.showVoiceStatus(this.listeningMessage(data.language));
+    }
   }
 
   onNativeError(session, data) {
@@ -955,7 +1071,7 @@ class HanumanChalisaEngine {
     }
     const messages = {
       permission: MSG_MIC_PERMISSION,
-      language: `${lang} speech recognition is not available on this phone. Connect to the internet, or download the offline ${lang} speech pack (Google app → Settings → Voice → Offline speech recognition), then tap Start again.`,
+      language: 'No speech recogniser on this phone supports Bengali, Hindi or English. Install or update the Google app from the Play Store, then tap Start again. Tap Sync works without it.',
       network: `Speech recognition needs an internet connection, or the offline ${lang} speech pack. Tap Start to try again.`,
       audio: 'Another app is using the microphone. Close it and tap Start again.'
     };
@@ -1010,8 +1126,10 @@ class HanumanChalisaEngine {
           ? v.webKeys[i - 1]
           : `w${session}-${v.webRun}-${i}`;
       }
-      this.processHeardWords(this.feed.update(v.webKeys[i], text, res.isFinal), res.isFinal);
+      this.processHeardWords(this.feed.update(v.webKeys[i], text, res.isFinal));
       if (!this.isActiveSession(session)) return;
+      if (res.isFinal) clearTimeout(v.holdTimer);
+      else this.armHoldRelease(v.webKeys[i]);
       latest = text;
     }
     if (latest) this.showHeard(latest);
@@ -1049,7 +1167,7 @@ class HanumanChalisaEngine {
   onWebEnd(session, rec) {
     const v = this.voice;
     if (!this.isActiveSession(session) || rec !== this.recognition || v.fatal) return;
-    this.processHeardWords(this.feed.flushAll(), true);
+    this.processHeardWords(this.feed.flushAll());
     if (!this.isActiveSession(session)) return;
     if (v.errorStreak > 8) {
       this.stopVoiceListening('Speech recognition stopped responding. Check your connection and tap Start again.');
@@ -1148,12 +1266,14 @@ class HanumanChalisaEngine {
   stopVoiceListening(message) {
     const v = this.voice;
     if (this.isVoiceListening && (v.engine === 'native' || v.engine === 'web')) {
-      this.processHeardWords(this.feed.flushAll(), false); // last held-back word
+      this.processHeardWords(this.feed.flushAll()); // last held-back word
     }
     this.isVoiceListening = false;
     this.voiceSession++; // invalidates callbacks of the session being stopped
 
     if (v.restartTimer) clearTimeout(v.restartTimer);
+    clearTimeout(v.holdTimer);
+    clearTimeout(v.lineCloseTimer);
     if (v.engine === 'native' && v.plugin) {
       settle(() => v.plugin.stop());
       settle(() => v.plugin.removeAllListeners());
@@ -1207,10 +1327,11 @@ class HanumanChalisaEngine {
   }
 
   /** Align newly heard words and reflect the result on the verses. */
-  processHeardWords(words, endOfUtterance = false) {
-    if (!this.isVoiceListening) return;
-    let events = words && words.length ? this.tracker.feed(words) : [];
-    if (endOfUtterance) events = events.concat(this.tracker.endOfUtterance());
+  processHeardWords(words) {
+    if (!this.isVoiceListening || !words || !words.length) return;
+    this.voice.lastWordAt = Date.now();
+    this.armLineClose();
+    const events = this.tracker.feed(words);
     if (events.length) this.applyTrackerEvents(events);
   }
 
@@ -1402,9 +1523,20 @@ class HanumanChalisaEngine {
   }
 
   async updateWakeLock() {
+    // While listening the screen must stay on whatever the setting: when it
+    // turns off, Android pauses the app and the microphone stops.
+    const want = document.visibilityState === 'visible' &&
+      (this.isVoiceListening || (this.keepAwake && (this.isAudioPlaying || this.currentMode === 'tap')));
+    const plugin = nativeSpeechPlugin();
+    if (plugin && typeof plugin.keepAwake === 'function') {
+      // Android WebView has no Wake Lock API; the app's plugin sets FLAG_KEEP_SCREEN_ON.
+      if (this.nativeAwake !== want) {
+        this.nativeAwake = want;
+        settle(() => plugin.keepAwake({ on: want }));
+      }
+      return;
+    }
     if (!('wakeLock' in navigator) || this.wakeLockBusy) return;
-    const want = this.keepAwake && document.visibilityState === 'visible' &&
-      (this.isAudioPlaying || this.isVoiceListening || this.currentMode === 'tap');
     this.wakeLockBusy = true;
     try {
       if (want && !this.wakeLock) {

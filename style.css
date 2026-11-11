@@ -106,7 +106,9 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-subtle);
-  padding: 8px 14px;
+  /* Android draws the app under the status bar (edge-to-edge, viewport-fit=cover):
+     keep the clock, camera cutout and battery icons off the header. */
+  padding: calc(8px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 8px max(14px, env(safe-area-inset-left, 0px));
 }
 
 [data-theme="light"] .temple-header {
@@ -1115,7 +1117,7 @@ body[data-lang="en"] .verse-line {
   /* In landscape the sheet is taller than the screen: scroll inside it
      instead of pushing its title and close button off the top. */
   max-height: calc(100vh - 12px);
-  max-height: calc(100dvh - 12px);
+  max-height: calc(100dvh - 12px - env(safe-area-inset-top, 0px));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1376,7 +1378,7 @@ body[data-lang="en"] .verse-line {
   #toggleMeaningBtn { order: 5; margin-left: auto; }
 
   /* keep the two-row header compact: reading space matters more */
-  .temple-header { padding: 6px 10px; }
+  .temple-header { padding: calc(6px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 6px max(10px, env(safe-area-inset-left, 0px)); }
   .sacred-yantra-icon { width: 32px; height: 32px; min-width: 32px; }
   .temple-header .icon-circle-btn { width: 36px; height: 36px; }
   .temple-header .lang-btn { min-height: 30px; padding: 4px 12px; }
@@ -1444,7 +1446,7 @@ body[data-lang="en"] .verse-line {
 
 @media (max-width: 480px) {
   .temple-header {
-    padding: 6px 10px;
+    padding: calc(6px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 6px max(10px, env(safe-area-inset-left, 0px));
   }
 
   .main-container {

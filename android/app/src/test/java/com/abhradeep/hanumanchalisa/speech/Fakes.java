@@ -124,11 +124,37 @@ final class Fakes {
         int throwOnStarts; // number of upcoming start() calls that throw
         Volume volume;
         final List<Boolean> mutedAtStart = new ArrayList<>();
+        /** Routes as "service/language"; the default is a single route. */
+        List<String> routes = new ArrayList<>(List.of("default/hi-IN"));
+        int route;
+
+        String currentRoute() {
+            return routes.get(route);
+        }
+
+        @Override
+        public boolean fallBack() {
+            if (route + 1 >= routes.size()) return false;
+            calls.add("destroy");
+            route++;
+            calls.add("route:" + currentRoute());
+            return true;
+        }
+
+        @Override
+        public String language() {
+            return currentRoute().split("/")[1];
+        }
+
+        @Override
+        public String service() {
+            return currentRoute().split("/")[0];
+        }
 
         @Override
         public void start(int attempt) {
             if (volume != null) mutedAtStart.add(volume.isMuted(MUSIC));
-            calls.add("start");
+            calls.add("start:" + currentRoute());
             if (throwOnStarts > 0) {
                 throwOnStarts--;
                 throw new IllegalStateException("recogniser not bound");
@@ -176,6 +202,11 @@ final class Fakes {
         @Override
         public void onState(boolean listening, String reason) {
             log.add("state:" + (listening ? "on" : "off") + ":" + reason);
+        }
+
+        @Override
+        public void onRoute(String language, String service, String reason) {
+            log.add("route:" + service + "/" + language + ":" + reason);
         }
 
         long count(String prefix) {

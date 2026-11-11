@@ -41,6 +41,7 @@
   const RESYNC_LINES = 2;        // lines ahead a re-anchor may jump into ...
   const RESYNC_MAX_LINES = 12;   // ... growing by one line per 2 unplaceable words, up to this
   const PENDING_LIMIT = 8;       // unmatched heard words kept for backfilling skipped words
+  const RESYNC_MAX_GAP = 2;      // expected words that may be missing between two re-anchor words
 
   function tokenize(text) {
     return String(text || '').split(/\s+/).filter(Boolean);
@@ -116,11 +117,107 @@
     return lines;
   }
 
+  function sameWord(a, b) {
+    if (a === b) return true;
+    const x = phoneticSkeleton(a);
+    const y = phoneticSkeleton(b);
+    return !!x && !!y && similarity(x, y) >= MATCH_THRESHOLD;
+  }
+
+  /** Does `words` start like `ref` (a transcript that repeats it and goes on)? */
+  function startsLike(words, ref) {
+    if (!ref.length || !words.length) return false;
+    const head = Math.min(3, words.length, ref.length);
+    let hits = 0;
+    for (let i = 0; i < head; i++) if (sameWord(words[i], ref[i])) hits++;
+    if (hits < Math.ceil((head * 2) / 3)) return false;
+    // a cumulative transcript does not shrink to a fraction of what it already said
+    return words.join('').length >= ref.join('').length * 0.5;
+  }
+
+  function findWord(list, from, word, span) {
+    for (let x = from; x < Math.min(list.length, from + span + 1); x++) {
+      if (sameWord(list[x], word)) return x;
+    }
+    return -1;
+  }
+
+  /**
+   * Align a new transcript `words` with the words already emitted from it
+   * (`done`, in emission order). Returns how many leading words of `words`
+   * they cover, plus `carry`: the unread rest of a token that merged emitted
+   * words with a new one ("ज्ञान" emitted, now "ज्ञानगुन" -> carry "गुन").
+   * Tolerates revised spellings, merged and split tokens, and words that
+   * appear in a final result but were never shown in a partial one.
+   */
+  function alignCovered(words, done) {
+    const n = done.length;
+    if (!n) return { covered: 0, carry: null };
+    let same = 0;
+    while (same < n && same < words.length && words[same] === done[same]) same++;
+    if (same === n) return { covered: n, carry: null };
+
+    let j = same;
+    let k = same;
+    let lastJ = same - 1;
+    let carry = null;
+    let aligned = same;
+    while (k < n && j < words.length) {
+      const w = words[j];
+      const d = done[k];
+      if (w === d || sameWord(w, d)) {
+        lastJ = j++; k++; aligned++; carry = null;
+        continue;
+      }
+      if (w.length > d.length && w.startsWith(d)) {
+        // merged token: it contains this emitted word, maybe more of them
+        let rest = w.slice(d.length);
+        k++; aligned++;
+        while (k < n && rest.startsWith(done[k])) { rest = rest.slice(done[k].length); k++; aligned++; }
+        lastJ = j++; carry = rest || null;
+        continue;
+      }
+      if (d.length > w.length && d.startsWith(w)) {
+        // an emitted token that is now split ("ज्ञानगुन" -> "ज्ञान गुन")
+        let rest = d.slice(w.length);
+        j++;
+        while (j < words.length && rest && rest.startsWith(words[j])) { rest = rest.slice(words[j].length); j++; }
+        lastJ = j - 1; k++; aligned++; carry = null;
+        continue;
+      }
+      const jAhead = findWord(words, j + 1, d, 3); // words never shown in a partial
+      const kAhead = findWord(done, k + 1, w, 3);  // an emitted word the transcript dropped
+      if (jAhead >= 0 && (kAhead < 0 || jAhead - j <= kAhead - k)) { j = jAhead; continue; }
+      if (kAhead >= 0) { k = kAhead; continue; }
+      lastJ = j++; k++; carry = null; // the recogniser revised this word
+    }
+    if (aligned * 2 < n) {
+      // Barely related: fall back to the word boundary closest to what was read.
+      const target = done.join('').length;
+      let best = 0;
+      let bestDiff = target;
+      let acc = 0;
+      for (let x = 1; x <= words.length; x++) {
+        acc += words[x - 1].length;
+        if (Math.abs(acc - target) < bestDiff) { best = x; bestDiff = Math.abs(acc - target); }
+      }
+      return { covered: best, carry: null };
+    }
+    return { covered: lastJ + 1, carry };
+  }
+
   /**
    * Emits each heard word once per recognition stream (an utterance or a Web
    * Speech result). The last word of an interim transcript is held back
    * because the recogniser is usually still revising it; it is released when
    * the transcript grows, turns final, or the stream is flushed.
+   *
+   * Recognisers differ: most resend the whole utterance with every update,
+   * some restart their partial text after a pause, and finals may repeat the
+   * whole utterance or only its last phrase. Each new transcript is therefore
+   * located inside what the stream already emitted (from its start, from the
+   * start of the current phrase, or as a new phrase) and only the words beyond
+   * that are emitted.
    */
   class TranscriptFeed {
     constructor() {
@@ -129,21 +226,46 @@
 
     update(streamId, text, isFinal = false) {
       const words = tokenize(text);
-      const st = this.streams.get(streamId) || { emitted: 0, words: [] };
+      let st = this.streams.get(streamId);
+      if (!st) {
+        st = { history: [], base: 0, words: [], start: 0 };
+        this.streams.set(streamId, st);
+      }
+      let fresh = [];
+      let start;
+      if (!st.words.length || startsLike(words, st.words)) {
+        start = st.start; // the same transcript, grown or revised (the usual case)
+      } else if (startsLike(words, st.history)) {
+        start = 0;
+      } else if (st.base > 0 && startsLike(words, st.history.slice(st.base))) {
+        start = st.base;
+      } else {
+        // A new phrase: release what the previous transcript still held back.
+        fresh = this.flush(streamId);
+        start = st.history.length;
+      }
+      st.base = start;
+      st.start = start;
       st.words = words;
       const stable = isFinal ? words.length : Math.max(0, words.length - 1);
-      const fresh = stable > st.emitted ? words.slice(st.emitted, stable) : [];
-      st.emitted = Math.max(st.emitted, stable);
-      this.streams.set(streamId, st);
+      fresh = fresh.concat(this.take(st, stable));
       return fresh;
     }
 
+    /** Emit the words of the current transcript up to `upTo` that were not emitted yet. */
+    take(st, upTo) {
+      const { covered, carry } = alignCovered(st.words, st.history.slice(st.start));
+      if (covered > upTo) return []; // the aligned token is still held back
+      const fresh = (carry ? [carry] : []).concat(st.words.slice(covered, upTo));
+      st.history.push(...fresh); // `history` is exactly what was emitted, in order
+      return fresh;
+    }
+
+    /** Release the held-back word(s) of a stream. */
     flush(streamId) {
       const st = this.streams.get(streamId);
       if (!st) return [];
-      const fresh = st.words.slice(st.emitted);
-      st.emitted = Math.max(st.emitted, st.words.length);
-      return fresh;
+      return this.take(st, st.words.length);
     }
 
     flushAll() {
@@ -191,25 +313,71 @@
     }
 
     /**
-     * The recogniser finished an utterance (the reciter paused). If only the
-     * last word of the line is still outstanding, the reciter has reached the
-     * end of the line and the recogniser lost that word: close the line.
-     * Nothing follows the final line of the Chalisa to close it, so there a
-     * pause after three quarters of the line is enough.
+     * The reciter has gone silent (the app calls this after several seconds
+     * without a heard word, not at every pause: slow chanters pause inside a
+     * line). If only the last word of the line is still outstanding, the
+     * recogniser lost it: close the line. Nothing follows the final line of the
+     * Chalisa to close it, so there half of the line is enough.
      */
     endOfUtterance() {
       const events = [];
+      if (!this.done && this.pending.length >= 2) this.settlePending(events);
       const n = this.line.words.length;
       const isFinalLine = this.lineIdx === this.lines.length - 1;
-      const enough = isFinalLine ? Math.max(1, Math.ceil(n * 0.75)) : n - 1;
+      // The app calls this after a few seconds of silence, not at every pause.
+      const enough = isFinalLine ? Math.max(1, Math.ceil(n * 0.5)) : n - 1;
       if (!this.done && n >= 2 && this.cursor > 0 && this.cursor >= enough) this.finishLine(events);
       return events;
+    }
+
+    /**
+     * The reciter is silent but some heard words were never placed (a soft
+     * voice: the recogniser caught only scattered words, too far apart for
+     * resync). Nothing more is coming to confirm them, so accept them if at
+     * least two distinctive ones, and at least half of them, line up in order
+     * over the rest of this line and the next.
+     */
+    settlePending(events) {
+      const stream = [];
+      for (let off = 0; off <= 1; off++) {
+        const L = this.lines[this.lineIdx + off];
+        if (!L) break;
+        for (let q = off === 0 ? this.cursor : 0; q < L.words.length; q++) {
+          stream.push({ lineIdx: this.lineIdx + off, q, word: L.words[q] });
+        }
+      }
+      const hits = [];
+      let pos = 0;
+      for (const heard of this.pending) {
+        for (let p = pos; p < stream.length; p++) {
+          const w = stream[p].word;
+          if (!w.weak && bestSimilarity(heard, w.keys) >= STRONG_THRESHOLD) {
+            hits.push(stream[p]);
+            pos = p + 1;
+            break;
+          }
+        }
+      }
+      if (hits.length < 2 || hits.length * 2 < this.pending.length) return;
+      const byLine = new Map();
+      for (const h of hits) {
+        if (!byLine.has(h.lineIdx)) byLine.set(h.lineIdx, []);
+        byLine.get(h.lineIdx).push(h.q);
+      }
+      for (const [lineIdx, positions] of byLine) {
+        if (this.done) break;
+        this.apply({ lineOffset: lineIdx - this.lineIdx, positions, usable: 0 }, events);
+      }
     }
 
     /** Feed heard words in spoken order. Returns the events they produced. */
     feed(heardWords) {
       const events = [];
-      const skels = (heardWords || []).map(w => phoneticSkeleton(w)).filter(Boolean);
+      // A recogniser may glue words across a verse mark ("सरना।रक्षक"): split there.
+      const skels = (heardWords || [])
+        .flatMap(w => String(w).split(/[।॥|,.;:!?]+/))
+        .map(w => phoneticSkeleton(w))
+        .filter(Boolean);
       let i = 0;
       while (i < skels.length && !this.done) {
         i += this.consume(skels, i, events);
@@ -305,14 +473,16 @@
       const hits = [];
       let pos = start;
       let strong = 0;
+      let wideGap = false;
       for (let k = 0; k < heard.length; k++) {
         let found = -1;
-        for (let d = 0; d <= (k === 0 ? 0 : 1); d++) {
+        for (let d = 0; d <= (k === 0 ? 0 : RESYNC_MAX_GAP); d++) {
           const item = stream[pos + d];
           if (!item) break;
           const s = bestSimilarity(heard[k], item.word.keys);
           if (s >= MATCH_THRESHOLD) {
             found = pos + d;
+            if (d > 1) wideGap = true;
             if (!item.word.weak && s >= STRONG_THRESHOLD) strong++;
             break;
           }
@@ -321,7 +491,10 @@
         hits.push(stream[found]);
         pos = found + 1;
       }
-      return strong >= 2 ? hits : null;
+      // A soft voice loses more words, so two may be missing between matches,
+      // but then every matched word must be distinctive.
+      const needed = wideGap ? heard.length : 2;
+      return strong >= needed ? hits : null;
     }
 
     bestMatch(L, from, skels, i, maxSkip, strongOnly) {
@@ -348,6 +521,13 @@
           const joined = SCRIPTS.filter(sc => word.skelBy[sc] && nextWord.skelBy[sc])
             .map(sc => word.skelBy[sc] + nextWord.skelBy[sc]);
           candidates.push({ heardLen: 1, wordLen: 2, heard: skels[i], keys: [...new Set(joined)], weak: false });
+          // "तीनोंलोककाँपै" - fast chanting can run three words together
+          const thirdWord = L.words[p + 2];
+          if (thirdWord) {
+            const joined3 = SCRIPTS.filter(sc => word.skelBy[sc] && nextWord.skelBy[sc] && thirdWord.skelBy[sc])
+              .map(sc => word.skelBy[sc] + nextWord.skelBy[sc] + thirdWord.skelBy[sc]);
+            candidates.push({ heardLen: 1, wordLen: 3, heard: skels[i], keys: [...new Set(joined3)], weak: false });
+          }
         }
         for (const c of candidates) {
           const s = bestSimilarity(c.heard, c.keys);
@@ -357,7 +537,7 @@
           if ((skip > 0 || strongOnly) && (c.weak || s < STRONG_THRESHOLD)) continue;
           const score = s - SKIP_PENALTY * skip;
           if (!best || score > best.score) {
-            best = { score, heardLen: c.heardLen, positions: c.wordLen === 2 ? [p, p + 1] : [p] };
+            best = { score, heardLen: c.heardLen, positions: Array.from({ length: c.wordLen }, (_, x) => p + x) };
           }
         }
       }

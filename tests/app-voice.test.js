@@ -24,7 +24,7 @@ const until = async (cond, ms = 1500) => {
 function fakeChantRecognizer({ permission = 'granted', initial = 'prompt', available = true, startError = null } = {}) {
   const listeners = {};
   const plugin = {
-    starts: [], stops: 0, permissionRequests: [],
+    starts: [], stops: 0, permissionRequests: [], awake: [],
     available: async () => ({ available }),
     checkPermissions: async () => ({ microphone: permission === 'granted' && initial === 'granted' ? 'granted' : initial }),
     requestPermissions: async (opts) => { plugin.permissionRequests.push(opts); return { microphone: permission }; },
@@ -36,6 +36,7 @@ function fakeChantRecognizer({ permission = 'granted', initial = 'prompt', avail
       return { beepMuted: true };
     },
     stop: async () => { plugin.stops++; },
+    keepAwake: async ({ on }) => { plugin.awake.push(on); },
     emit: (name, data) => listeners[name] && listeners[name](data),
     listening: () => Object.keys(listeners).length > 0
   };
@@ -75,7 +76,7 @@ test('native: one start for the whole session; the plugin restarts itself, the w
   app.jumpToVerse(2);
   await app.startVoiceListening();
   assert.equal(app.voice.engine, 'native');
-  assert.deepEqual(plain(plugin.starts), [{ language: 'hi-IN', muteBeep: true }], 'asks the native side to mute the system beep');
+  assert.deepEqual(plain(plugin.starts), [{ language: 'hi-IN', fallbackLanguages: ['en-IN'], muteBeep: true }], 'asks the native side to mute the system beep');
   assert.equal(app.voice.beepMuted, true);
 
   speak(plugin, 1, VERSE2_LINE0);
@@ -143,7 +144,7 @@ test('native: denied permission stops cleanly with an explanation', async () => 
 
 test('native: fatal errors stop with a specific message; a network notice keeps listening', async () => {
   const cases = [
-    ['language', /offline हिन्दी \(hi-IN\) speech pack/],
+    ['language', /Install or update the Google app/],
     ['network', /internet connection/],
     ['permission', /permission/i],
     ['audio', /Another app is using the microphone/],
@@ -166,6 +167,53 @@ test('native: fatal errors stop with a specific message; a network notice keeps 
   }
 });
 
+test('native (Samsung S23, Bengali on screen): listens in Hindi first, Bengali/English only as fallbacks', async () => {
+  const plugin = fakeChantRecognizer({ initial: 'granted' });
+  const { globals } = nativeGlobals(plugin);
+  const { app } = loadApp({ storage: { chalisa_script_lang: 'bn' }, globals });
+  app.switchMode('voice');
+  app.jumpToVerse(2);
+  await app.startVoiceListening();
+  assert.deepEqual(plain(plugin.starts[0]), { language: 'hi-IN', fallbackLanguages: ['bn-IN', 'en-IN'], muteBeep: true });
+  speak(plugin, 1, VERSE2_LINE0); // Devanagari transcript, Bengali on screen
+  assert.deepEqual([app.currentVerseIndex, app.currentLineIndex], [2, 1]);
+  assert.deepEqual([app.accuracy.matched, app.accuracy.total], [5, 5]);
+  app.stopVoiceListening();
+});
+
+test('native: a phone without Hindi recognition falls back to Bengali with a clear note, and still tracks', async () => {
+  const plugin = fakeChantRecognizer({ initial: 'granted' });
+  const { globals } = nativeGlobals(plugin);
+  const { app, getEl } = loadApp({ storage: { chalisa_script_lang: 'bn' }, globals });
+  app.switchMode('voice');
+  app.jumpToVerse(2);
+  await app.startVoiceListening();
+
+  plugin.emit('route', { language: 'bn-IN', service: 'default', reason: 'language' });
+  assert.equal(app.isVoiceListening, true, 'not an error');
+  assert.equal(app.voice.lang, 'bn-IN');
+  const status = getEl('voiceHeardText').textContent;
+  assert.match(status, /हिन्दी \(hi-IN\) speech recognition is not available/);
+  assert.match(status, /listening in বাংলা/);
+
+  speak(plugin, 3, 'জয় হনুমান জ্ঞান গুন সাগর');
+  assert.deepEqual([app.currentVerseIndex, app.currentLineIndex], [2, 1]);
+  assert.deepEqual([app.accuracy.matched, app.accuracy.total], [5, 5]);
+  app.stopVoiceListening();
+});
+
+test('native: switching to another recogniser in the same language just keeps listening', async () => {
+  const plugin = fakeChantRecognizer({ initial: 'granted' });
+  const { globals } = nativeGlobals(plugin);
+  const { app, getEl } = loadApp({ storage: { chalisa_script_lang: 'bn' }, globals });
+  app.switchMode('voice');
+  await app.startVoiceListening();
+  plugin.emit('route', { language: 'hi-IN', service: 'com.google.android.googlequicksearchbox', reason: 'failing' });
+  assert.equal(app.voice.lang, 'hi-IN');
+  assert.match(getEl('voiceHeardText').textContent, /Listening in हिन्दी/);
+  app.stopVoiceListening();
+});
+
 test('native: background pause and resume are shown, and tracking continues after resume', async () => {
   const plugin = fakeChantRecognizer({ initial: 'granted' });
   const { globals } = nativeGlobals(plugin);
@@ -185,7 +233,7 @@ test('native: background pause and resume are shown, and tracking continues afte
   app.stopVoiceListening();
 });
 
-test('native: switching to Bengali restarts in bn-IN and ignores the old session\'s events', async () => {
+test('native: switching to Bengali restarts with Bengali as a fallback and ignores the old session\'s events', async () => {
   const plugin = fakeChantRecognizer({ initial: 'granted' });
   const { globals } = nativeGlobals(plugin);
   const { app } = loadApp({ globals });
@@ -194,7 +242,7 @@ test('native: switching to Bengali restarts in bn-IN and ignores the old session
   await app.startVoiceListening();
   app.scriptLang = 'bn';
   await app.restartVoiceListening();
-  assert.deepEqual(plugin.starts.map(s => s.language), ['hi-IN', 'bn-IN']);
+  assert.deepEqual(plain(plugin.starts.map(s => s.fallbackLanguages)), [['en-IN'], ['bn-IN', 'en-IN']]);
   speak(plugin, 7, 'জয় হনুমান জ্ঞান গুন সাগর');
   assert.deepEqual([app.currentVerseIndex, app.currentLineIndex], [2, 1], 'Bengali words match the same line');
   app.stopVoiceListening();
@@ -288,10 +336,10 @@ test('web speech: Android duplicate results are read once, recogniser restarts o
   app.stopVoiceListening();
 });
 
-test('English display still recognises in Hindi; Bengali display in Bengali', async () => {
+test('every script is recognised in Hindi (the verses are Awadhi in any script)', async () => {
   const instances = [];
   class FakeSR { constructor() { instances.push(this); } start() {} stop() {} abort() {} }
-  for (const [script, lang] of [['en', 'hi-IN'], ['bn', 'bn-IN'], ['hi', 'hi-IN']]) {
+  for (const [script, lang] of [['en', 'hi-IN'], ['bn', 'hi-IN'], ['hi', 'hi-IN']]) {
     const { app } = loadApp({ storage: { chalisa_script_lang: script }, globals: { webkitSpeechRecognition: FakeSR } });
     app.switchMode('voice');
     await app.startVoiceListening();

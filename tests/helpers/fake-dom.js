@@ -101,7 +101,7 @@ function loadApp(opts = {}) {
     vm.runInContext(src, ctx, { filename: f });
   }
   const app = new ctx.HanumanChalisaEngine();
-  app.voiceTiming = { webRestartDelay: 5 };
+  app.voiceTiming = { webRestartDelay: 5, holdReleaseMs: 15, lineCloseSilenceMs: 40, quietHintMs: 60 };
   return { app, ctx, getEl, audio, storage };
 }
 

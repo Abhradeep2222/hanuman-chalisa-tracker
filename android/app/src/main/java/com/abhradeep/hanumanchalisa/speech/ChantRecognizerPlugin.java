@@ -1,17 +1,25 @@
 package com.abhradeep.hanumanchalisa.speech;
 
 import android.Manifest;
+import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.ResolveInfo;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.Settings;
 import android.speech.RecognitionListener;
+import android.speech.RecognitionService;
 import android.speech.RecognizerIntent;
 import android.speech.SpeechRecognizer;
+import android.view.Window;
+import android.view.WindowManager;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
 import com.getcapacitor.PermissionState;
@@ -21,6 +29,9 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 /**
  * Continuous, beep-free speech recognition for AI Voice Sync.
@@ -28,11 +39,20 @@ import java.util.ArrayList;
  * JavaScript: window.Capacitor.Plugins.ChantRecognizer
  *   available()                         -> { available }
  *   checkPermissions() / requestPermissions({ permissions: ['microphone'] })
- *   start({ language, muteBeep })       -> { beepMuted }
+ *   start({ language, muteBeep })       -> { beepMuted, language, service }
  *   stop()
- *   getState()                          -> { listening, paused, attempts, beepMuted }
+ *   getState()                          -> { listening, paused, attempts, beepMuted, language, service }
  *   events: partial { segment, text }, final { segment, text },
- *           error { code, message, fatal }, state { listening, reason, beepMuted }
+ *           error { code, message, fatal }, state { listening, reason, beepMuted },
+ *           route { language, service, reason }
+ *
+ * Phones differ in which recognition service is the default (Samsung often
+ * uses its own, which has no Bengali; others use Google's on-device one, which
+ * only knows downloaded languages). The plugin therefore tries routes in
+ * order: Google's recogniser (the one Gboard voice typing uses), the phone's
+ * default, then any other installed service; first in the requested language,
+ * then Hindi, then English. The web layer matches every script, so a Hindi
+ * transcript still tracks the Bengali display.
  *
  * The logic lives in ChantSession / BeepGuard (unit-tested); this class only
  * adapts them to SpeechRecognizer, AudioManager and the Capacitor bridge. All
@@ -48,11 +68,37 @@ public class ChantRecognizerPlugin extends Plugin {
     private static final String PREFS = "chant_recognizer";
     private static final String KEY_MUTED = "muted_streams";
 
+    /** Google app's recognition service: online + downloaded offline languages. */
+    static final ComponentName GOOGLE_RECOGNIZER = new ComponentName(
+        "com.google.android.googlequicksearchbox",
+        "com.google.android.voicesearch.serviceapi.GoogleRecognitionService"
+    );
+
+    /** A recognition service (null = the phone's default) and a language. */
+    static final class Route {
+
+        final ComponentName service;
+        final String language;
+
+        Route(ComponentName service, String language) {
+            this.service = service;
+            this.language = language;
+        }
+
+        String serviceName() {
+            return service == null ? "default" : service.getPackageName();
+        }
+    }
+
     private final Handler main = new Handler(Looper.getMainLooper());
     private SpeechRecognizer recognizer;
     private BeepGuard guard;
     private ChantSession session;
-    private String language = "hi-IN";
+    private final List<Route> routes = new ArrayList<>();
+    private int routeIndex;
+    private boolean jsWantsAwake;
+    private long lastLevelAt;
+    private static final long LEVEL_INTERVAL_MS = 100;
 
     @Override
     public void load() {
@@ -77,6 +123,17 @@ public class ChantRecognizerPlugin extends Plugin {
             return;
         }
         final String lang = call.getString("language", "hi-IN");
+        final List<String> fallbacks = new ArrayList<>();
+        JSArray requested = call.getArray("fallbackLanguages");
+        if (requested != null) {
+            for (int i = 0; i < requested.length(); i++) {
+                String l = requested.optString(i, "");
+                if (!l.isEmpty()) fallbacks.add(l);
+            }
+        } else {
+            fallbacks.add("hi-IN");
+            fallbacks.add("en-IN");
+        }
         final boolean muteBeep = !Boolean.FALSE.equals(call.getBoolean("muteBeep", true));
         main.post(() -> {
             if (!SpeechRecognizer.isRecognitionAvailable(getContext())) {
@@ -84,11 +141,86 @@ public class ChantRecognizerPlugin extends Plugin {
                 return;
             }
             if (session.isRunning()) session.stop();
-            language = lang;
+            planRoutes(lang, fallbacks);
             guard.setEnabled(muteBeep);
             session.start();
-            call.resolve(new JSObject().put("beepMuted", session.beepMuted()));
+            Route r = route();
+            call.resolve(
+                new JSObject().put("beepMuted", session.beepMuted()).put("language", r.language).put("service", r.serviceName())
+            );
         });
+    }
+
+    private Route route() {
+        return routes.get(Math.min(routeIndex, routes.size() - 1));
+    }
+
+    private void planRoutes(String requested, List<String> fallbacks) {
+        routes.clear();
+        routeIndex = 0;
+        List<ComponentName> services = recognitionServices();
+        Set<String> languages = new LinkedHashSet<>();
+        languages.add(requested);
+        languages.addAll(fallbacks);
+        for (String lang : languages) {
+            for (ComponentName service : services) routes.add(new Route(service, lang));
+        }
+        Logger.debug("ChantRecognizer", "routes: " + routes.size() + " (" + services.size() + " services)");
+    }
+
+    /** Google's recogniser first, then the phone's default, then every other installed service. */
+    private List<ComponentName> recognitionServices() {
+        List<ComponentName> installed = new ArrayList<>();
+        try {
+            List<ResolveInfo> found = getContext().getPackageManager().queryIntentServices(new Intent(RecognitionService.SERVICE_INTERFACE), 0);
+            for (ResolveInfo info : found) {
+                if (info.serviceInfo != null) installed.add(new ComponentName(info.serviceInfo.packageName, info.serviceInfo.name));
+            }
+        } catch (RuntimeException e) {
+            Logger.debug("ChantRecognizer", "cannot list recognition services: " + e);
+        }
+        ComponentName phoneDefault = null;
+        try {
+            String flat = Settings.Secure.getString(getContext().getContentResolver(), "voice_recognition_service");
+            if (flat != null && !flat.isEmpty()) phoneDefault = ComponentName.unflattenFromString(flat);
+        } catch (RuntimeException ignored) {
+            // not readable on this phone: the default may then be tried twice, which is harmless
+        }
+
+        List<ComponentName> ordered = new ArrayList<>();
+        if (installed.contains(GOOGLE_RECOGNIZER)) ordered.add(GOOGLE_RECOGNIZER);
+        if (!GOOGLE_RECOGNIZER.equals(phoneDefault)) ordered.add(null); // null = createSpeechRecognizer(context)
+        for (ComponentName c : installed) {
+            if (!ordered.contains(c) && !c.equals(phoneDefault)) ordered.add(c);
+        }
+        return ordered;
+    }
+
+    /**
+     * Keep the screen on (Android WebView has no Wake Lock API). While a session
+     * runs the screen is kept on regardless: when it turns off, Android pauses
+     * the app and the microphone stops.
+     */
+    @PluginMethod
+    public void keepAwake(PluginCall call) {
+        final boolean on = Boolean.TRUE.equals(call.getBoolean("on", false));
+        main.post(() -> {
+            jsWantsAwake = on;
+            applyKeepScreenOn();
+            call.resolve();
+        });
+    }
+
+    private void applyKeepScreenOn() {
+        Activity activity = getActivity();
+        if (activity == null) return;
+        Window window = activity.getWindow();
+        if (window == null) return;
+        if (jsWantsAwake || (session != null && session.isRunning())) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        }
     }
 
     @PluginMethod
@@ -101,13 +233,15 @@ public class ChantRecognizerPlugin extends Plugin {
 
     @PluginMethod
     public void getState(PluginCall call) {
-        main.post(() -> call.resolve(
-            new JSObject()
+        main.post(() -> {
+            JSObject state = new JSObject()
                 .put("listening", session.isListening())
                 .put("paused", session.isPaused())
                 .put("attempts", session.attemptsStarted())
-                .put("beepMuted", session.beepMuted())
-        ));
+                .put("beepMuted", session.beepMuted());
+            if (!routes.isEmpty()) state.put("language", route().language).put("service", route().serviceName());
+            call.resolve(state);
+        });
     }
 
     // Android gives a backgrounded app no microphone: pause there, resume on return.
@@ -130,7 +264,7 @@ public class ChantRecognizerPlugin extends Plugin {
     private Intent buildIntent() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, language);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, route().language);
         intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
@@ -149,9 +283,33 @@ public class ChantRecognizerPlugin extends Plugin {
 
         @Override
         public void start(int attempt) {
-            if (recognizer == null) recognizer = SpeechRecognizer.createSpeechRecognizer(getContext());
+            if (recognizer == null) {
+                ComponentName service = route().service;
+                recognizer = service == null
+                    ? SpeechRecognizer.createSpeechRecognizer(getContext())
+                    : SpeechRecognizer.createSpeechRecognizer(getContext(), service);
+            }
             recognizer.setRecognitionListener(new Listener(attempt));
             recognizer.startListening(buildIntent());
+        }
+
+        @Override
+        public boolean fallBack() {
+            if (routeIndex + 1 >= routes.size()) return false;
+            destroy();
+            routeIndex++;
+            Logger.debug("ChantRecognizer", "falling back to " + route().serviceName() + " / " + route().language);
+            return true;
+        }
+
+        @Override
+        public String language() {
+            return route().language;
+        }
+
+        @Override
+        public String service() {
+            return route().serviceName();
         }
 
         @Override
@@ -192,6 +350,11 @@ public class ChantRecognizerPlugin extends Plugin {
         @Override
         public void onRmsChanged(float rmsdB) {
             session.onRmsChanged(attempt);
+            if (!session.isListening()) return;
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastLevelAt < LEVEL_INTERVAL_MS) return;
+            lastLevelAt = now;
+            notifyListeners("level", new JSObject().put("rms", (double) rmsdB));
         }
 
         @Override
@@ -241,10 +404,16 @@ public class ChantRecognizerPlugin extends Plugin {
 
         @Override
         public void onState(boolean listening, String reason) {
+            applyKeepScreenOn();
             notifyListeners(
                 "state",
                 new JSObject().put("listening", listening).put("reason", reason).put("beepMuted", guard.isEngaged())
             );
+        }
+
+        @Override
+        public void onRoute(String language, String service, String reason) {
+            notifyListeners("route", new JSObject().put("language", language).put("service", service).put("reason", reason));
         }
     }
 

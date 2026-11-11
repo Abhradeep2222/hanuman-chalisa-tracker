@@ -296,6 +296,94 @@ public class ChantSessionTest {
         assertFalse(session.isRunning());
     }
 
+    // ------------------------------------------------- routes (Samsung S23 case)
+
+    @Test
+    public void bengaliMissingOnTheDefaultRecogniserFallsBackInsteadOfStopping() {
+        // Samsung's default recogniser has no Bengali; Google's has it online.
+        rec.routes = new java.util.ArrayList<>(Arrays.asList(
+            "samsung/bn-IN", "google/bn-IN", "samsung/hi-IN", "google/hi-IN"));
+        session.start();
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_NOT_SUPPORTED);
+        assertEquals("route:google/bn-IN:language", events.last());
+        assertEquals(0, events.count("fatal"));
+        clock.advance(120);
+        assertEquals("start:google/bn-IN", rec.calls.get(rec.calls.size() - 1));
+        utterance("জয় হনুমান জ্ঞান গুন সাগর");
+        assertEquals("final:2:জয় হনুমান জ্ঞান গুন সাগর", events.last());
+        assertTrue(session.isListening());
+    }
+
+    @Test
+    public void bengaliMissingEverywhereFallsBackToHindi() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList(
+            "google/bn-IN", "default/bn-IN", "google/hi-IN", "default/hi-IN"));
+        session.start();
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_UNAVAILABLE); // no Bengali pack
+        clock.advance(120);
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_NOT_SUPPORTED);
+        assertEquals("route:google/hi-IN:language", events.last());
+        clock.advance(120);
+        utterance("जय हनुमान");
+        assertEquals(0, events.count("fatal"));
+        assertTrue(session.isListening());
+        assertTrue("still muted while listening", volume.isMuted(MUSIC));
+    }
+
+    @Test
+    public void noRouteLeftForTheLanguageIsFatal() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("default/bn-IN", "default/hi-IN"));
+        session.start();
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_NOT_SUPPORTED);
+        clock.advance(120);
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_NOT_SUPPORTED);
+        assertEquals(1, events.count("fatal:language"));
+        assertFalse(session.isRunning());
+        assertFalse(volume.isMuted(MUSIC));
+    }
+
+    @Test
+    public void aRouteThatNeverWorksIsAbandonedAfterThreeFailures() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("bixby/bn-IN", "google/bn-IN"));
+        session.start();
+        session.onError(a(), ChantSession.ERROR_SERVER);
+        clock.advance(300);
+        session.onError(a(), ChantSession.ERROR_CLIENT);
+        clock.advance(600);
+        session.onError(a(), ChantSession.ERROR_SERVER);
+        assertEquals("route:google/bn-IN:failing", events.last());
+        clock.advance(120);
+        utterance("জয় হনুমান");
+        assertTrue(session.isListening());
+    }
+
+    @Test
+    public void aRouteThatHasWorkedIsNotAbandonedForNetworkTrouble() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("google/bn-IN", "default/bn-IN"));
+        session.start();
+        utterance("জয় হনুমান");
+        clock.advance(120);
+        for (int i = 0; i < 5; i++) {
+            session.onError(a(), ERROR_NETWORK);
+            clock.advance(5000);
+        }
+        assertEquals(0, events.count("route:"));
+        assertEquals(0, rec.route);
+    }
+
+    @Test
+    public void exhaustedRoutesEndWithTheLastErrorCode() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("google/bn-IN", "default/bn-IN"));
+        session.start();
+        for (int i = 0; i < 20 && session.isRunning(); i++) {
+            session.onError(a(), ERROR_NETWORK);
+            clock.advance(5000);
+        }
+        assertEquals(1, events.count("route:default/bn-IN:failing"));
+        assertEquals(1, events.count("fatal:network"));
+        assertFalse(volume.isMuted(MUSIC));
+    }
+
     @Test
     public void micBusyIsRetried() {
         session.start();

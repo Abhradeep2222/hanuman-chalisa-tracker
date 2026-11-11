@@ -39,9 +39,13 @@ public final class ChantSession {
     public static final int ERROR_LANGUAGE_NOT_SUPPORTED = 12;
     public static final int ERROR_LANGUAGE_UNAVAILABLE = 13;
 
-    /** Wraps android.speech.SpeechRecognizer. */
+    /**
+     * Wraps android.speech.SpeechRecognizer. A recogniser works through an
+     * ordered list of routes (recognition service + language), e.g. Google's
+     * recogniser in Bengali, the phone's default one in Bengali, then Hindi.
+     */
     public interface Recognizer {
-        /** Begin listening. Callbacks for this attempt must report {@code attempt}. */
+        /** Begin listening on the current route. Callbacks for this attempt must report {@code attempt}. */
         void start(int attempt);
 
         /** Abort the current attempt. */
@@ -49,6 +53,15 @@ public final class ChantSession {
 
         /** Drop the recogniser instance; the next start() creates a fresh one. */
         void destroy();
+
+        /** Move to the next route (dropping the current instance). False when none is left. */
+        boolean fallBack();
+
+        /** Language of the current route, e.g. "bn-IN". */
+        String language();
+
+        /** Recognition service of the current route (package name, or "default"). */
+        String service();
     }
 
     public interface Events {
@@ -59,6 +72,9 @@ public final class ChantSession {
         void onError(String code, String message, boolean fatal);
 
         void onState(boolean listening, String reason);
+
+        /** Switched to another route; reason "language" (not available) or "failing". */
+        void onRoute(String language, String service, String reason);
     }
 
     public interface Scheduler {
@@ -82,6 +98,8 @@ public final class ChantSession {
         public int maxErrorStreak = 8;
         /** Consecutive network failures before the web layer is told (non-fatal). */
         public int networkNoticeAfter = 2;
+        /** Failures on a route that never recognised anything before trying the next route. */
+        public int routeFailuresBeforeFallback = 3;
     }
 
     private enum Kind { SILENCE, RETRY, RECREATE, PERMISSION, LANGUAGE }
@@ -102,6 +120,8 @@ public final class ChantSession {
     private long attemptStartedAt;
     private long lastActivityAt;
     private int errorStreak;
+    private boolean routeProven; // the current route has recognised speech
+    private int routeFailures;
     private int attemptsStarted;
     private Object restartTimer;
     private Object stallTimer;
@@ -121,6 +141,8 @@ public final class ChantSession {
         running = true;
         paused = false;
         errorStreak = 0;
+        routeProven = false;
+        routeFailures = 0;
         events.onState(true, "started");
         beginAttempt();
     }
@@ -199,6 +221,7 @@ public final class ChantSession {
         if (t.isEmpty() || t.equals(lastPartial)) return;
         lastPartial = t;
         errorStreak = 0;
+        routeProven = true;
         events.onPartial(segment, t);
     }
 
@@ -212,6 +235,7 @@ public final class ChantSession {
         if (!current(a)) return;
         String t = clean(text);
         if (!t.isEmpty() || micReady) errorStreak = 0;
+        if (!t.isEmpty()) routeProven = true;
         closeAttempt(t.isEmpty() ? lastPartial : t);
         scheduleRestart(timing.restartDelayMs);
     }
@@ -232,6 +256,9 @@ public final class ChantSession {
                 fail("permission", "Microphone permission was revoked.");
                 return;
             case LANGUAGE:
+                // e.g. Samsung's default recogniser has no Bengali: try the next service / language
+                quietly(recognizer::destroy);
+                if (switchRoute("language")) return;
                 fail("language", "Speech recognition for this language is not available on this phone.");
                 return;
             case RECREATE:
@@ -321,6 +348,9 @@ public final class ChantSession {
     }
 
     private void failSoft(int code) {
+        // A route that has never recognised anything and keeps failing is probably
+        // unusable on this phone (wrong service, missing language): try the next one.
+        if (!routeProven && ++routeFailures >= timing.routeFailuresBeforeFallback && switchRoute("failing")) return;
         errorStreak++;
         if (errorStreak > timing.maxErrorStreak) {
             fail(codeName(code), "Speech recognition keeps failing (" + describe(code) + ").");
@@ -330,6 +360,22 @@ public final class ChantSession {
             events.onError("network", "Speech recognition cannot reach the network. Retrying.", false);
         }
         scheduleRestart(backoff(errorStreak));
+    }
+
+    private boolean switchRoute(String reason) {
+        boolean moved;
+        try {
+            moved = recognizer.fallBack();
+        } catch (RuntimeException e) {
+            moved = false;
+        }
+        if (!moved) return false;
+        routeProven = false;
+        routeFailures = 0;
+        errorStreak = 0;
+        events.onRoute(recognizer.language(), recognizer.service(), reason);
+        scheduleRestart(timing.restartDelayMs);
+        return true;
     }
 
     private void fail(String code, String message) {

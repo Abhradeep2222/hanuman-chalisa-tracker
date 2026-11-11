@@ -34,8 +34,9 @@
 
 ### 🎙️ 2. Real-Time AI Voice Speech Recognition & Accuracy Scoring
 - **Microphone Voice Detection:** Chant aloud into your smartphone or laptop microphone.
-- **Cross-Script Phonetic Matching (`js/speech-matcher.js`):** every word is compared with its **Hindi (`हिन्दी`)**, **Bengali (`বাংলা`)** and **English transliteration** spellings at once, so the recogniser may answer in any script. Recognition runs in `hi-IN` (Hindi & English display) or `bn-IN` (Bengali display).
+- **Cross-Script Phonetic Matching (`js/speech-matcher.js`):** every word is compared with its **Hindi (`हिन्दी`)**, **Bengali (`বাংলা`)** and **English transliteration** spellings at once, so the recogniser may answer in any script. Recognition runs in `hi-IN` for every script (the verses are Awadhi in any script, and Hindi recognition is on almost every phone); if a phone has no Hindi recogniser, the app falls back to Bengali or English and to the phone's other recognition services automatically.
 - **In-order word alignment:** words turn green as they are recognised; words the recogniser could not hear are underlined and the tracker keeps going. A line is finished when its last word is reached, and the tracker never runs ahead of the reciter.
+- **Any pace, any voice:** slow chanters can pause inside a line (a line closes only after ~5 s of silence), each word lights up within a second even before the next one is said, fast chanting with run-together words ("ज्ञानगुन", "तीनोंलोककाँपै") is split back into words, and a soft voice that loses a third of its words still completes the Chalisa in order. A level meter shows the microphone is hearing you, with a hint when the voice is too soft.
 - **Honest accuracy:** *words recognised ÷ words in the lines you chanted*. It measures how much of your chanting the speech engine understood. Background noise, speed and accent all affect it.
 - **Devotional Tier Badges:**
   - 🌟 **Divya ★★★ (95% - 100%)**: Divine, flawless recitation.
