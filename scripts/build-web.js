@@ -32,4 +32,17 @@ if (fs.existsSync(jsSrcDir)) {
   }
 }
 
+// Copy audio folder
+const audioSrcDir = path.join(root, 'audio');
+const audioDestDir = path.join(dist, 'audio');
+if (fs.existsSync(audioSrcDir)) {
+  if (!fs.existsSync(audioDestDir)) {
+    fs.mkdirSync(audioDestDir, { recursive: true });
+  }
+  const audioFiles = fs.readdirSync(audioSrcDir);
+  for (const aFile of audioFiles) {
+    fs.copyFileSync(path.join(audioSrcDir, aFile), path.join(audioDestDir, aFile));
+  }
+}
+
 console.log('Web assets successfully packaged into dist/');

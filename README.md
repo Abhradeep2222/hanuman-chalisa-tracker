@@ -1,7 +1,7 @@
-# 🕉️ Shri Hanuman Chalisa | AI Devotional Kara-Sync
+# 🕉️ Shri Hanuman Chalisa | AI Devotional Kara-Sync & Mobile App
 
 [![Live App](https://img.shields.io/badge/Live%20App-Click%20To%20Open-FF7A00?style=for-the-badge&logo=googlechrome&logoColor=white)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
-[![Download Android APK](https://img.shields.io/badge/Download-Android%20APK-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases)
+[![Download Android APK v1.2](https://img.shields.io/badge/Download-Android%20APK%20v1.2-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.2.0/HanumanChalisa-v1.2.apk)
 [![Hosted on GitHub Pages](https://img.shields.io/badge/Hosted%20on-GitHub%20Pages-10B981?style=for-the-badge&logo=github)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
 [![Accuracy Tracker](https://img.shields.io/badge/Real--time-Voice%20AI%20Sync-F59E0B?style=for-the-badge)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
 
@@ -13,82 +13,71 @@
 ---
 
 ### 📲 **Android APK Download (সরাসরি মোবাইল অ্যাপ ডাউনলোড):**
-👉 **[Click Here to Download HanumanChalisa-v1.1.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.1.0/HanumanChalisa-v1.1.apk)**
+👉 **[Click Here to Download HanumanChalisa-v1.2.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.2.0/HanumanChalisa-v1.2.apk)**
 
 👉 **[GitHub All Releases Page](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases)**
 
-*(ল্যাপটপ অন না রেখেও সরাসরি আপনার মোবাইল ফোনে APK ডাউনলোড ও ইনস্টল করে সম্পূর্ণ অফলাইনে চালিসা পাঠ ও ট্র্যাকিং করুন!)*
+*(ল্যাপটপ অন না রেখেও সরাসরি আপনার মোবাইল ফোনে APK ডাউনলোড ও ইনস্টল করে সম্পূর্ণ অফলাইনে আসল ভক্তিমূলক অডিও সহ চালিসা পাঠ ও ট্র্যাকিং করুন!)*
 
 ---
 
-## ✨ Features & Capabilities
+## ✨ Features & Capabilities (v1.2.0)
 
-### 🎙️ 1. Real-Time AI Voice Speech Synchronization
-- **Word-by-Word Glowing Feedback:** As you chant aloud, each authentic word lights up in vibrant emerald-gold (`#10B981`) in real-time.
-- **Cross-Script Phonetic Engine:** Supports chanting in **Hindi (`हिन्दी`)**, **Bengali (`বাংলা`)**, and **English (Roman Transliteration)**. The AI recognizes speech across all accents and Awadhi/Sanskrit pronunciations using multi-layered consonant skeleton matching.
-- **Auto Line Progression:** Smoothly scrolls and centers the active Chaupai as you progress through all 43 verses (Opening Dohas 1 & 2, Chaupais 1 to 40, and Closing Doha).
+### 🎵 1. Soulful Devotional Audio & Radiant Word-by-Word Karaoke Sync
+- **Authentic Devotional Recitation:** Integrated iconic, melodious rendition of Shri Hanuman Chalisa by Hariharan Ji with sacred bells, shankh, and flute.
+- **Calibrated 43-Verse Karaoke Glow:** Every single word illuminates in a brilliant radiant gold halo (`#FFB800`) synchronously as the audio recites.
+- **Interactive Scrubber & Chaupai Jump:** Seek to any part of the 9m 41s Chalisa or tap any Chaupai card to jump instantly.
+- **Speed Controls:** `0.75x` (Dhyan/Slow for learners), `1.0x` (Nitya/Normal temple tempo), `1.25x` (Tez/Energetic recitation).
+- **Loop / Repeat Option:** Repeat continuous chanting for Sankalpa Mala goals.
 
-### 📊 2. Live Recitation Accuracy Meter with Sacred Tiers
-- **Dynamic Accuracy Calculation:** Continuously calculates pronunciation accuracy percentage (`50% - 100%`).
+### 🎙️ 2. Real-Time AI Voice Speech Recognition & Accuracy Scoring
+- **Microphone Voice Detection:** Chant aloud into your smartphone or laptop microphone.
+- **Phonetic Matching Engine:** Matches speech in **Hindi (`हिन्दी`)**, **Bengali (`বাংলা`)**, and **English Transliteration**.
 - **Devotional Tier Badges:**
-  - 🌟 **Divya (95% - 100%)**: Divine, flawless recitation.
-  - ✨ **Shuddha (85% - 94%)**: Pure, auspicious chanting.
-  - 🙏 **Sadhak (70% - 84%)**: Devoted seeker.
-  - 📿 **Abhyas (< 70%)**: Chanting practice.
+  - 🌟 **Divya ★★★ (95% - 100%)**: Divine, flawless recitation.
+  - ✨ **Uttam ★★ (85% - 94%)**: Auspicious, pure chanting.
+  - 🙏 **Shreshtha ★ (70% - 84%)**: Devoted seeker.
+  - 📿 **Sadhak (< 70%)**: Chanting practice.
+- **Live 5-Bar Frequency Visualizer:** Real-time animated audio wave bars dance to the sound of your voice.
 
-### 🌊 3. Real-Time Web Audio API Voice Waveform Visualizer
-- Visual 5-bar animated equalizer right inside the floating HUD that physically dances to the volume and acoustic decibels of your voice, giving immediate feedback that your phone microphone is active.
+### 👆 3. Tap Sync (Mala Counter Mode)
+- **Silent & Meditative Chanting:** Tap anywhere on the mobile screen to advance word-by-word.
+- **Sacred Bell Chimes & Haptic Feedback:** Vibrates subtly (`navigator.vibrate`) with a resonant 528Hz bronze temple tone.
 
-### 🎵 4. Listen & Learn Mode (Devotional Audio Recitation)
-- Built-in soothing devotional recitation with speed controls:
-  - **0.75x (Dhyan / Slow)**: Perfect for beginners learning correct pronunciation.
-  - **1.0x (Nitya / Normal)**: Standard serene temple tempo.
-  - **1.25x (Tez / Fast)**: Swift path recitation.
-- Words highlight synchronously in karaoke style as they are spoken.
+### 📱 4. Redesigned Mobile-First Sacred Temple Architecture
+- **Midnight Obsidian & Royal Saffron Aesthetics:** Designed with deep temple dark tones (`#0B0E14`), glowing saffron amber highlights, and glassmorphic card layers.
+- **100% Fluid Mobile Responsiveness:** Fully optimized for all phone screen widths (320px, 360px, 390px, 412px, 480px) and desktops with zero horizontal overflow.
+- **Touch-Friendly Controls:** Sized with minimum 44x44px ergonomic touch targets for effortless single-hand thumb navigation.
+- **Settings Bottom Sheet (Drawer):** Easily adjust font size (`A-` / `A+`), meaning languages, and screen wake lock.
 
-### 📿 5. Jap Mala Mode & Sankalpa Goal Tracker
-- Set your sacred chanting goal: **1x**, **7x**, **11x**, **21x**, or **108x (Full Maha Mala)**.
-- **Tap Sync with Haptic Vibration:** Tap the screen or press the spacebar to manually advance word-by-word with tactile vibration feedback (`navigator.vibrate`) for silent chanting in temples or travels.
-
-### 📖 6. Dual-Language Meaning (Bhavarth) & Font Resizer
-- Complete authentic **Hindi (`सरल हिंदी भावार्थ`)** and **English** meanings for all 43 verses.
-- Toggle meanings on/off with the **[अर्थ Meaning]** button.
-- Adjust font scale comfortably on any mobile screen using **[A-]** and **[A+]** buttons.
-
-### 🏛️ 7. Sacred Temple Aesthetics & Mobile-First Design
-- Crafted with a luxury spiritual color palette: **Midnight Obsidian (`#08090D`)**, **Sacred Saffron (`#F59E0B`)**, and **Foil Gold**.
-- Responsive single-hand thumb navigation optimized for Android Chrome and iOS Safari.
-- Light parchment mode toggle for reading in sunlight.
-- LocalStorage persistence: Chants counter, day streaks, font size, and language settings are safely saved across visits.
+### 📖 5. Multilingual Meanings (Bhavarth) & Offline Storage
+- Authentic Hindi, Bengali, and English verse-by-verse meanings.
+- LocalStorage safe persistence for streaks, recitation counts, preferences, and custom goals.
+- 100% offline capability via Service Worker (PWA) and local APK asset bundling.
 
 ---
 
-## 🚀 Quick Start / How to Use
+## 🚀 How to Run Locally
 
-1. Open **[https://abhradeep2222.github.io/hanuman-chalisa-tracker/](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)** on your phone or computer.
-2. Select your preferred script (**English**, **हिन्दी**, or **বাংলা**) from the top-right dropdown.
-3. Tap **"AI Voice Sync"** and grant microphone permissions when prompted by your browser.
-4. Start chanting! Watch words glow green, accuracy update in real-time, and verses auto-center.
-5. Alternatively, use **"Listen & Learn"** to listen to the audio recitation, or **"Tap Sync"** for manual Jap Mala counting.
+```bash
+# Clone the repository
+git clone https://github.com/Abhradeep2222/hanuman-chalisa-tracker.git
+cd hanuman-chalisa-tracker
 
----
+# Install dependencies
+npm install
 
-## 📂 Project Structure
+# Build web assets and sync to Android
+node scripts/build-web.js
+npx cap sync android
 
-```
-hanuman-chalisa-tracker/
-├── index.html              # Main HTML5 application structure & UI layout
-├── style.css               # Temple design, responsive queries, and animations
-├── README.md               # Documentation & Live link
-└── js/
-    ├── chalisa-meanings.js # Authentic Hindi & English Bhavarth for all 43 verses
-    ├── chalisa-data.js     # Authentic verses in 3 scripts & aligned word tokens
-    └── app.js              # Speech recognition, audio visualizer & accuracy engine
+# Run local preview server
+npx serve .
 ```
 
 ---
 
-## 📜 License & Devotion
-Developed with deep bhakti and devotion to **Lord Shri Hanuman**. May this app bring peace, strength, and spiritual upliftment to every devotee.
+## 📜 Devotion & License
+Developed with supreme bhakti to **Lord Shri Hanuman**. May this app bring peace, strength, and spiritual upliftment to every devotee.
 
 **Jai Shri Ram! Jai Bajrangbali!**

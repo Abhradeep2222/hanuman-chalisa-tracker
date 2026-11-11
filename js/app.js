@@ -1,1454 +1,970 @@
 /**
- * Shri Hanuman Chalisa - Production-Grade AI Devotional Engine
- * Engineered for 100% Reliability on Mobile, Tablet & Desktop.
+ * Shri Hanuman Chalisa - Core Application Engine v4.0
+ * Features:
+ *  - Soulful Devotional Audio playback with calibrated 43-verse karaoke synchronization
+ *  - Real-time AI Speech Recognition with phonetic matching & sacred accuracy scoring
+ *  - Interactive Tap Sync mode with sacred chime and haptic feedback
+ *  - Multilingual support (Hindi, Bengali, English text & meanings)
+ *  - Full mobile responsiveness & offline PWA/Capacitor APK support
  */
 
+// Calibrated Timestamps (in seconds) for Hariharan Ji's Shri Hanuman Chalisa (9m 41s)
+const VERSE_TIMESTAMPS = [
+  // Opening Dohas
+  { verseIndex: 0, start: 42.5, end: 74.0 },   // Doha 1
+  { verseIndex: 1, start: 74.0, end: 104.5 },  // Doha 2
+  // 40 Chaupais (~11.0s each)
+  { verseIndex: 2, start: 104.5, end: 115.5 }, // Chaupai 1
+  { verseIndex: 3, start: 115.5, end: 126.5 }, // Chaupai 2
+  { verseIndex: 4, start: 126.5, end: 137.5 }, // Chaupai 3
+  { verseIndex: 5, start: 137.5, end: 148.5 }, // Chaupai 4
+  { verseIndex: 6, start: 148.5, end: 159.5 }, // Chaupai 5
+  { verseIndex: 7, start: 159.5, end: 170.5 }, // Chaupai 6
+  { verseIndex: 8, start: 170.5, end: 181.5 }, // Chaupai 7
+  { verseIndex: 9, start: 181.5, end: 192.5 }, // Chaupai 8
+  { verseIndex: 10, start: 192.5, end: 203.5 }, // Chaupai 9
+  { verseIndex: 11, start: 203.5, end: 214.5 }, // Chaupai 10
+  { verseIndex: 12, start: 214.5, end: 225.5 }, // Chaupai 11
+  { verseIndex: 13, start: 225.5, end: 236.5 }, // Chaupai 12
+  { verseIndex: 14, start: 236.5, end: 247.5 }, // Chaupai 13
+  { verseIndex: 15, start: 247.5, end: 258.5 }, // Chaupai 14
+  { verseIndex: 16, start: 258.5, end: 269.5 }, // Chaupai 15
+  { verseIndex: 17, start: 269.5, end: 280.5 }, // Chaupai 16
+  { verseIndex: 18, start: 280.5, end: 291.5 }, // Chaupai 17
+  { verseIndex: 19, start: 291.5, end: 302.5 }, // Chaupai 18
+  { verseIndex: 20, start: 302.5, end: 313.5 }, // Chaupai 19
+  { verseIndex: 21, start: 313.5, end: 324.5 }, // Chaupai 20
+  { verseIndex: 22, start: 324.5, end: 335.5 }, // Chaupai 21
+  { verseIndex: 23, start: 335.5, end: 346.5 }, // Chaupai 22
+  { verseIndex: 24, start: 346.5, end: 357.5 }, // Chaupai 23
+  { verseIndex: 25, start: 357.5, end: 368.5 }, // Chaupai 24
+  { verseIndex: 26, start: 368.5, end: 379.5 }, // Chaupai 25
+  { verseIndex: 27, start: 379.5, end: 390.5 }, // Chaupai 26
+  { verseIndex: 28, start: 390.5, end: 401.5 }, // Chaupai 27
+  { verseIndex: 29, start: 401.5, end: 412.5 }, // Chaupai 28
+  { verseIndex: 30, start: 412.5, end: 423.5 }, // Chaupai 29
+  { verseIndex: 31, start: 423.5, end: 434.5 }, // Chaupai 30
+  { verseIndex: 32, start: 434.5, end: 445.5 }, // Chaupai 31
+  { verseIndex: 33, start: 445.5, end: 456.5 }, // Chaupai 32
+  { verseIndex: 34, start: 456.5, end: 467.5 }, // Chaupai 33
+  { verseIndex: 35, start: 467.5, end: 478.5 }, // Chaupai 34
+  { verseIndex: 36, start: 478.5, end: 489.5 }, // Chaupai 35
+  { verseIndex: 37, start: 489.5, end: 500.5 }, // Chaupai 36
+  { verseIndex: 38, start: 500.5, end: 511.5 }, // Chaupai 37
+  { verseIndex: 39, start: 511.5, end: 522.5 }, // Chaupai 38
+  { verseIndex: 40, start: 522.5, end: 533.5 }, // Chaupai 39
+  { verseIndex: 41, start: 533.5, end: 544.5 }, // Chaupai 40
+  // Concluding Doha
+  { verseIndex: 42, start: 544.5, end: 574.0 }  // Ending Doha
+];
+
+// Safe Storage Helper
 const safeStorage = {
   get(key, fallback = null) {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const val = window.localStorage.getItem(key);
-        return val !== null ? val : fallback;
-      }
-    } catch (e) {}
-    return fallback;
+      const val = localStorage.getItem(key);
+      return val !== null ? val : fallback;
+    } catch (e) {
+      return fallback;
+    }
   },
   set(key, val) {
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(key, String(val));
-      }
+      localStorage.setItem(key, val);
     } catch (e) {}
   }
 };
 
-// Singleton Web Audio Context to prevent mobile hardware limit (6 contexts max)
-let _sharedAudioCtx = null;
+// Singleton Web Audio Context for Chimes & Microphone Analysis
+let sharedAudioCtx = null;
 function getSharedAudioContext() {
-  try {
-    if (!_sharedAudioCtx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        _sharedAudioCtx = new AudioCtx();
-      }
+  if (!sharedAudioCtx) {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (AudioCtx) {
+      sharedAudioCtx = new AudioCtx();
     }
-    if (_sharedAudioCtx && _sharedAudioCtx.state === 'suspended') {
-      _sharedAudioCtx.resume().catch(() => {});
-    }
-  } catch (e) {}
-  return _sharedAudioCtx;
+  }
+  if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
 }
 
-class HanumanChalisaApp {
+// Master App Engine
+class HanumanChalisaEngine {
   constructor() {
-    this.lines = typeof getFlatLines === 'function' ? getFlatLines() : [];
-    this.totalLines = this.lines.length;
+    // State
+    this.currentMode = 'audio'; // 'audio' | 'voice' | 'tap'
+    this.scriptLang = safeStorage.get('chalisa_script_lang', 'hi');
+    this.meaningLang = safeStorage.get('chalisa_meaning_lang', 'hi');
+    this.showMeaning = safeStorage.get('chalisa_show_meaning', 'true') === 'true';
+    this.theme = safeStorage.get('chalisa_theme', 'dark');
+    this.fontSizeLevel = parseInt(safeStorage.get('chalisa_font_size', '1'), 10); // 0=sm, 1=md, 2=lg
+    this.autoScroll = safeStorage.get('chalisa_autoscroll', 'true') === 'true';
+    this.playbackSpeed = parseFloat(safeStorage.get('chalisa_speed', '1.0'));
+    this.sankalpaGoal = parseInt(safeStorage.get('chalisa_sankalpa_goal', '1'), 10);
+    this.chantCount = parseInt(safeStorage.get('chalisa_chant_count', '0'), 10);
+    this.isLooping = safeStorage.get('chalisa_loop', 'false') === 'true';
 
-    // Detect mobile device
-    this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    // Tracking
+    this.currentVerseIndex = 0;
+    this.currentLineIndex = 0;
+    this.currentWordIndex = 0;
+    this.totalVerses = CHALISA_DATA.verses.length;
+    this.allLines = [];
+    this.flattenLines();
 
-    // Persisted Preferences (100% safe against SecurityError in private mode)
-    this.language = safeStorage.get('hc_lang', 'auto');
-    this.meaningLang = safeStorage.get('hc_meaningLang', 'hi');
-    this.currentLineIndex = parseInt(safeStorage.get('hc_currentLine', '0'), 10);
-    if (isNaN(this.currentLineIndex) || this.currentLineIndex < 0 || this.currentLineIndex >= this.totalLines) {
-      this.currentLineIndex = 0;
-    }
+    // Accuracy
+    this.accuracyScores = [];
+    this.overallAccuracy = 0;
 
-    this.currentWordIdx = 0;
-    this.chantCount = parseInt(safeStorage.get('hc_chantCount', '0'), 10);
-    this.sankalpaTarget = parseInt(safeStorage.get('hc_sankalpa', '1'), 10);
-    this.streak = parseInt(safeStorage.get('hc_streak', '0'), 10);
-    this.lastChantDate = safeStorage.get('hc_lastChantDate', '');
-    this.theme = safeStorage.get('hc_theme', 'dark');
-    this.fontScale = parseInt(safeStorage.get('hc_fontScale', '17'), 10);
-    this.showMeanings = safeStorage.get('hc_showMeanings') !== 'false';
-    this.recitationSpeed = 1.0;
+    // Audio Player
+    this.audio = document.getElementById('chalisaAudio');
+    this.isAudioPlaying = false;
+    this.audioDuration = 581; // 9m 41s
 
-    // Accuracy & Scoring
-    this.totalAttemptedWords = 0;
-    this.totalMatchedWords = 0;
-    this.lineScores = {};
-
-    // State Flags
-    this.isListening = false;
-    this.isAiChanting = false;
+    // Speech Recognition & Microphone
+    this.isVoiceListening = false;
     this.recognition = null;
-    this.speechSynth = window.speechSynthesis || null;
-    this.aiKaraokeTimer = null;
-
-    // Web Audio API State (Desktop only)
-    this.audioCtx = null;
-    this.analyser = null;
     this.micStream = null;
+    this.micAnalyser = null;
     this.animFrameId = null;
 
+    // DOM Elements
     this.bindDomElements();
-    this.init();
+    this.applyTheme();
+    this.applyFontSize();
+    this.renderVerses();
+    this.setupEventListeners();
+    this.updateStatsDisplay();
+    this.switchMode('audio');
+  }
+
+  // Pre-calculate flattened list of all 86 lines
+  flattenLines() {
+    this.allLines = [];
+    CHALISA_DATA.verses.forEach((verse, vIdx) => {
+      verse.lines.forEach((line, lIdx) => {
+        this.allLines.push({
+          verseIndex: vIdx,
+          lineIndexInVerse: lIdx,
+          flatIndex: this.allLines.length,
+          verse: verse,
+          line: line
+        });
+      });
+    });
   }
 
   bindDomElements() {
     this.els = {
-      languageSelect: document.getElementById('languageSelect'),
+      // Header
       toggleMeaningBtn: document.getElementById('toggleMeaningBtn'),
       meaningBtnText: document.getElementById('meaningBtnText'),
+      langBtns: document.querySelectorAll('.lang-btn'),
+      themeToggleBtn: document.getElementById('themeToggleBtn'),
       openSettingsBtn: document.getElementById('openSettingsBtn'),
-      closeSettingsModal: document.getElementById('closeSettingsModal'),
+
+      // Mode Navigation
+      tabAudioMode: document.getElementById('tabAudioMode'),
+      tabVoiceMode: document.getElementById('tabVoiceMode'),
+      tabTapMode: document.getElementById('tabTapMode'),
+
+      // Console Panels
+      audioConsolePanel: document.getElementById('audioConsolePanel'),
+      voiceConsolePanel: document.getElementById('voiceConsolePanel'),
+      tapConsolePanel: document.getElementById('tapConsolePanel'),
+
+      // Audio Controls
+      mainAudioPlayBtn: document.getElementById('mainAudioPlayBtn'),
+      audioPlayIcon: document.getElementById('audioPlayIcon'),
+      audioPlayText: document.getElementById('audioPlayText'),
+      prevVerseBtn: document.getElementById('prevVerseBtn'),
+      nextVerseBtn: document.getElementById('nextVerseBtn'),
+      audioProgressSlider: document.getElementById('audioProgressSlider'),
+      sliderFillBar: document.getElementById('sliderFillBar'),
+      audioCurrentTime: document.getElementById('audioCurrentTime'),
+      audioTotalDuration: document.getElementById('audioTotalDuration'),
+      speedBtns: document.querySelectorAll('.speed-btn'),
+      loopAudioBtn: document.getElementById('loopAudioBtn'),
+      loopLabel: document.getElementById('loopLabel'),
+      resetAudioBtn: document.getElementById('resetAudioBtn'),
+
+      // Voice Controls
+      toggleVoiceBtn: document.getElementById('toggleVoiceBtn'),
+      voiceBtnIcon: document.getElementById('voiceBtnIcon'),
+      voiceBtnText: document.getElementById('voiceBtnText'),
+      voiceWaveBars: document.getElementById('voiceWaveBars'),
+      voiceHeardText: document.getElementById('voiceHeardText'),
+
+      // Tap Controls
+      tapTouchSurface: document.getElementById('tapTouchSurface'),
+      resetTapBtn: document.getElementById('resetTapBtn'),
+
+      // Stats
+      chantCountDisplay: document.getElementById('chantCountDisplay'),
+      statGoalTag: document.getElementById('statGoalTag'),
+      sankalpaProgressFill: document.getElementById('sankalpaProgressFill'),
+      accuracyDisplay: document.getElementById('accuracyDisplay'),
+      sacredTierBadge: document.getElementById('sacredTierBadge'),
+      verseIndicatorDisplay: document.getElementById('verseIndicatorDisplay'),
+      verseSubCount: document.getElementById('verseSubCount'),
+      paceDisplay: document.getElementById('paceDisplay'),
+      activeModeName: document.getElementById('activeModeName'),
+      goalPills: document.querySelectorAll('.goal-pill'),
+
+      // Viewport & HUD
+      versesContainer: document.getElementById('versesContainer'),
+      hudStatusDot: document.getElementById('hudStatusDot'),
+      hudStatusLabel: document.getElementById('hudStatusLabel'),
+      hudEqualizer: document.getElementById('hudEqualizer'),
+      hudTranscript: document.getElementById('hudTranscript'),
+      hudJumpBtn: document.getElementById('hudJumpBtn'),
+
+      // Settings Modal
       settingsModal: document.getElementById('settingsModal'),
-      fontDecBtn: document.getElementById('fontDecBtn'),
-      fontIncBtn: document.getElementById('fontIncBtn'),
-      fontSizeVal: document.getElementById('fontSizeVal'),
-      themeToggle: document.getElementById('themeToggle'),
-      themeToggleText: document.getElementById('themeToggleText'),
-      meaningCheckbox: document.getElementById('meaningCheckbox'),
-      speedToggle: document.getElementById('speedToggle'),
-      startBtn: document.getElementById('startBtn'),
-      startBtnText: document.getElementById('startBtnText'),
-      aiAutoChantBtn: document.getElementById('aiAutoChantBtn'),
-      aiAutoChantText: document.getElementById('aiAutoChantText'),
-      tapSyncBtn: document.getElementById('tapSyncBtn'),
-      resetBtn: document.getElementById('resetBtn'),
-      chantCount: document.getElementById('chantCount'),
-      targetSub: document.getElementById('targetSub'),
-      accuracyScore: document.getElementById('accuracyScore'),
-      accuracyBadge: document.getElementById('accuracyBadge'),
-      progressDisplay: document.getElementById('progressDisplay'),
-      progressCard: document.getElementById('progressCard'),
-      streakCount: document.getElementById('streakCount'),
-      progressBar: document.getElementById('progressBar'),
-      chalisaContainer: document.getElementById('chalisaContainer'),
-      transcriptText: document.getElementById('transcriptText'),
-      micDot: document.getElementById('micDot'),
-      micLabel: document.getElementById('micLabel'),
-      audioEqualizer: document.getElementById('audioEqualizer'),
-      eqBars: document.querySelectorAll('.eq-bar'),
-      completionOverlay: document.getElementById('completionOverlay'),
-      completionAccuracy: document.getElementById('completionAccuracy'),
-      completionCount: document.getElementById('completionCount'),
-      chantAgainBtn: document.getElementById('chantAgainBtn'),
-      closeCompletionBtn: document.getElementById('closeCompletionBtn'),
-      jumpModal: document.getElementById('jumpModal'),
-      closeJumpModal: document.getElementById('closeJumpModal'),
-      jumpGrid: document.getElementById('jumpGrid'),
-      targetButtons: document.querySelectorAll('.target-btn'),
-      mobileNoticeModal: document.getElementById('mobileNoticeModal'),
-      noticeTitle: document.getElementById('noticeTitle'),
-      noticeDesc: document.getElementById('noticeDesc'),
-      noticeUseAudioBtn: document.getElementById('noticeUseAudioBtn'),
-      noticeUseTapBtn: document.getElementById('noticeUseTapBtn'),
-      closeNoticeBtn: document.getElementById('closeNoticeBtn')
+      closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+      fontDecrBtn: document.getElementById('fontDecrBtn'),
+      fontIncrBtn: document.getElementById('fontIncrBtn'),
+      fontSizeLabel: document.getElementById('fontSizeLabel'),
+      meaningLangBtns: document.querySelectorAll('#meaningLangGroup .pill-option'),
+      autoScrollToggle: document.getElementById('autoScrollToggle'),
+      wakeLockToggle: document.getElementById('wakeLockToggle'),
+      resetAllDataBtn: document.getElementById('resetAllDataBtn')
     };
   }
 
-  init() {
-    this.applyTheme();
-    this.applyFontSize();
+  // Render all 43 verse cards with words & meanings
+  renderVerses() {
+    document.body.setAttribute('data-lang', this.scriptLang);
+    this.els.meaningBtnText.textContent = this.meaningLang === 'hi' ? 'अर्थ' : (this.meaningLang === 'bn' ? 'ভাবার্থ' : 'Meaning');
 
-    if (this.els.languageSelect) {
-      this.els.languageSelect.value = this.language;
-    }
+    let html = '';
+    CHALISA_DATA.verses.forEach((verse, vIdx) => {
+      const verseLabel = verse.label[this.scriptLang] || verse.label.en;
+      const verseTitle = `${verseLabel} • ${verse.num} / ${verse.totalOfCategory}`;
+      
+      // Get meaning
+      const meaningObj = CHALISA_MEANINGS && CHALISA_MEANINGS[vIdx] ? CHALISA_MEANINGS[vIdx] : null;
+      const meaningText = meaningObj ? (meaningObj[this.meaningLang] || meaningObj.en || '') : '';
 
-    if (this.els.meaningCheckbox) {
-      this.els.meaningCheckbox.checked = this.showMeanings;
-    }
+      html += `
+        <article class="verse-card ${vIdx === this.currentVerseIndex ? 'active-verse' : ''}" id="verseCard-${vIdx}" data-verse="${vIdx}">
+          <div class="verse-card-header">
+            <span class="verse-badge">${verseTitle}</span>
+            <span class="verse-acc-pill" id="verseAcc-${vIdx}"></span>
+          </div>
+          <div class="verse-content">
+      `;
 
-    this.updateMeaningButtonText();
-    this.renderChalisa();
-    this.buildJumpModal();
-    this.updateStatsDisplay();
-    this.calculateStreak();
-    this.setupEventListeners();
+      verse.lines.forEach((line, lIdx) => {
+        const text = line[this.scriptLang] || line.hi || line.en;
+        const words = text.split(/\s+/).filter(w => w.trim().length > 0);
+        
+        html += `<div class="verse-line" id="line-${vIdx}-${lIdx}" data-verse="${vIdx}" data-line="${lIdx}">`;
+        words.forEach((word, wIdx) => {
+          html += `<span class="word-token" id="word-${vIdx}-${lIdx}-${wIdx}" data-word="${word}">${word}</span> `;
+        });
+        html += `</div>`;
+      });
 
-    // Mark active target
-    this.els.targetButtons.forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.target, 10) === this.sankalpaTarget);
+      if (meaningText) {
+        html += `
+          <div class="verse-meaning-box" id="meaning-${vIdx}" style="display: ${this.showMeaning ? 'block' : 'none'};">
+            <span class="meaning-label">${this.els.meaningBtnText.textContent}:</span> ${meaningText}
+          </div>
+        `;
+      }
+
+      html += `</div></article>`;
     });
-    this.updateTargetDisplay();
 
-    requestAnimationFrame(() => this.highlightCurrentLine(false));
+    this.els.versesContainer.innerHTML = html;
   }
 
   setupEventListeners() {
-    // 1. Microphone Voice Mode (Direct user gesture for mobile security)
-    if (this.els.startBtn) {
-      this.els.startBtn.addEventListener('click', () => {
-        this.toggleListening();
-      });
-    }
+    // 1. Mode Switcher Tabs
+    this.els.tabAudioMode.addEventListener('click', () => this.switchMode('audio'));
+    this.els.tabVoiceMode.addEventListener('click', () => this.switchMode('voice'));
+    this.els.tabTapMode.addEventListener('click', () => this.switchMode('tap'));
 
-    // 2. Audio Recitation (Listen & Learn)
-    if (this.els.aiAutoChantBtn) {
-      this.els.aiAutoChantBtn.addEventListener('click', () => {
-        this.toggleAiRecitation();
-      });
-    }
+    // 2. Audio Engine Controls
+    this.els.mainAudioPlayBtn.addEventListener('click', () => this.toggleAudioPlayback());
+    this.els.prevVerseBtn.addEventListener('click', () => this.jumpToVerse(Math.max(0, this.currentVerseIndex - 1)));
+    this.els.nextVerseBtn.addEventListener('click', () => this.jumpToVerse(Math.min(this.totalVerses - 1, this.currentVerseIndex + 1)));
 
-    // 3. Tap to Sync (Tactile Word Advance)
-    if (this.els.tapSyncBtn) {
-      this.els.tapSyncBtn.addEventListener('click', () => {
-        this.advanceWordOrLine();
-      });
-    }
+    this.els.audioProgressSlider.addEventListener('input', (e) => {
+      const seekTime = parseFloat(e.target.value);
+      this.audio.currentTime = seekTime;
+      this.updateSliderUI(seekTime);
+    });
 
-    // Notice Modal Action Buttons
-    if (this.els.noticeUseAudioBtn) {
-      this.els.noticeUseAudioBtn.addEventListener('click', () => {
-        this.closeMobileNotice();
-        this.startAiRecitation();
-      });
-    }
-    if (this.els.noticeUseTapBtn) {
-      this.els.noticeUseTapBtn.addEventListener('click', () => {
-        this.closeMobileNotice();
-        this.advanceWordOrLine();
-      });
-    }
-    if (this.els.closeNoticeBtn) {
-      this.els.closeNoticeBtn.addEventListener('click', () => {
-        this.closeMobileNotice();
-      });
-    }
-    if (this.els.mobileNoticeModal) {
-      this.els.mobileNoticeModal.addEventListener('click', (e) => {
-        if (e.target === this.els.mobileNoticeModal) this.closeMobileNotice();
-      });
-    }
+    this.els.resetAudioBtn.addEventListener('click', () => {
+      this.audio.currentTime = 0;
+      this.jumpToVerse(0);
+      if (this.isAudioPlaying) this.audio.play();
+    });
 
-    // Keyboard Spacebar
-    window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' && (e.target === document.body || e.target.tagName !== 'INPUT')) {
-        e.preventDefault();
-        this.advanceWordOrLine();
+    this.els.loopAudioBtn.addEventListener('click', () => {
+      this.isLooping = !this.isLooping;
+      safeStorage.set('chalisa_loop', this.isLooping.toString());
+      this.els.loopAudioBtn.classList.toggle('active', this.isLooping);
+      this.els.loopLabel.textContent = this.isLooping ? 'Loop: ON' : 'Loop: 1x';
+    });
+
+    // Speed Controls
+    this.els.speedBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const speed = parseFloat(e.target.dataset.speed);
+        this.setPlaybackSpeed(speed);
+      });
+    });
+
+    // Native Audio Events
+    this.audio.addEventListener('timeupdate', () => this.handleAudioTimeUpdate());
+    this.audio.addEventListener('ended', () => this.handleAudioEnded());
+    this.audio.addEventListener('play', () => this.setAudioPlayingState(true));
+    this.audio.addEventListener('pause', () => this.setAudioPlayingState(false));
+
+    // Fallback if local mp3 fails, load remote CDN stream
+    this.audio.addEventListener('error', () => {
+      console.warn('Local audio load fallback to CDN...');
+      this.audio.src = 'https://archive.org/download/hanuman-chalisa-i-gulshan-kumar-i-hariharan-full-hd-video-i-shree-hanuman-chalisa/%E0%A4%B9%E0%A4%A8%E0%A4%AE%E0%A4%A8%20%E0%A4%9A%E0%A4%B2%E0%A4%B8%20Hanuman%20Chalisa%20I%20GULSHAN%20KUMAR%20I%20HARIHARAN,%20Full%20HD%20Video%20I%20Shree%20Hanuman%20Chalisa.mp3';
+      this.audio.load();
+    });
+
+    // 3. AI Voice Sync Controls
+    this.els.toggleVoiceBtn.addEventListener('click', () => this.toggleVoiceListening());
+
+    // 4. Tap Sync Surface
+    this.els.tapTouchSurface.addEventListener('click', () => this.handleTapAdvance());
+    this.els.resetTapBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.jumpToVerse(0);
+    });
+
+    // 5. Verse Card Click Jump
+    this.els.versesContainer.addEventListener('click', (e) => {
+      const card = e.target.closest('.verse-card');
+      if (card && card.dataset.verse !== undefined) {
+        const targetVIdx = parseInt(card.dataset.verse, 10);
+        this.jumpToVerse(targetVIdx);
+        if (this.currentMode === 'audio') {
+          const ts = VERSE_TIMESTAMPS[targetVIdx];
+          if (ts) {
+            this.audio.currentTime = ts.start;
+            this.audio.play().catch(() => {});
+          }
+        }
       }
     });
 
-    // Reset Button
-    if (this.els.resetBtn) {
-      this.els.resetBtn.addEventListener('click', () => this.resetSession());
-    }
-
-    // Language Dropdown
-    if (this.els.languageSelect) {
-      this.els.languageSelect.addEventListener('change', (e) => this.changeLanguage(e.target.value));
-    }
-
-    // Meaning Quick Toggle Button (Cycles: Hindi -> Bengali -> English -> Off)
-    if (this.els.toggleMeaningBtn) {
-      this.els.toggleMeaningBtn.addEventListener('click', () => this.cycleMeaningLanguage());
-    }
-
-    // Settings Modal
-    if (this.els.openSettingsBtn) {
-      this.els.openSettingsBtn.addEventListener('click', () => {
-        if (this.els.settingsModal) this.els.settingsModal.classList.add('open');
-      });
-    }
-    if (this.els.closeSettingsModal) {
-      this.els.closeSettingsModal.addEventListener('click', () => {
-        if (this.els.settingsModal) this.els.settingsModal.classList.remove('open');
-      });
-    }
-    if (this.els.settingsModal) {
-      this.els.settingsModal.addEventListener('click', (e) => {
-        if (e.target === this.els.settingsModal) this.els.settingsModal.classList.remove('open');
-      });
-    }
-
-    // Meaning Checkbox in Settings
-    if (this.els.meaningCheckbox) {
-      this.els.meaningCheckbox.addEventListener('change', (e) => {
-        this.showMeanings = e.target.checked;
-        safeStorage.set('hc_showMeanings', String(this.showMeanings));
-        this.renderChalisa();
-      });
-    }
-
-    // Font Size in Settings
-    if (this.els.fontDecBtn) {
-      this.els.fontDecBtn.addEventListener('click', () => this.changeFontSize(-1));
-    }
-    if (this.els.fontIncBtn) {
-      this.els.fontIncBtn.addEventListener('click', () => this.changeFontSize(1));
-    }
-
-    // Theme Toggle inside Settings
-    if (this.els.themeToggle) {
-      this.els.themeToggle.addEventListener('click', () => this.toggleTheme());
-    }
-
-    // Speed Selector in Settings (0.75x, 1.0x, 1.25x, 1.5x)
-    if (this.els.speedToggle) {
-      this.els.speedToggle.addEventListener('click', (e) => {
-        const pill = e.target.closest('.speed-pill');
-        if (!pill) return;
-        this.els.speedToggle.querySelectorAll('.speed-pill').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        this.recitationSpeed = parseFloat(pill.dataset.speed) || 1.0;
-        if (this.isAiChanting) {
-          this.stopAiRecitation();
-          this.startAiRecitation();
-        }
-      });
-    }
-
-    // Sankalpa Target Pills
-    this.els.targetButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        this.els.targetButtons.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        this.sankalpaTarget = parseInt(btn.dataset.target, 10) || 1;
-        safeStorage.set('hc_sankalpa', String(this.sankalpaTarget));
-        this.updateTargetDisplay();
+    // 6. Header Actions
+    this.els.toggleMeaningBtn.addEventListener('click', () => {
+      this.showMeaning = !this.showMeaning;
+      safeStorage.set('chalisa_show_meaning', this.showMeaning.toString());
+      this.els.toggleMeaningBtn.classList.toggle('active', this.showMeaning);
+      document.querySelectorAll('.verse-meaning-box').forEach(box => {
+        box.style.display = this.showMeaning ? 'block' : 'none';
       });
     });
 
-    // Jump & Completion Modals
-    if (this.els.progressCard) {
-      this.els.progressCard.addEventListener('click', () => this.openJumpModal());
-    }
-    if (this.els.closeJumpModal) {
-      this.els.closeJumpModal.addEventListener('click', () => this.closeJumpModal());
-    }
-    if (this.els.jumpModal) {
-      this.els.jumpModal.addEventListener('click', (e) => {
-        if (e.target === this.els.jumpModal) this.closeJumpModal();
+    this.els.langBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const lang = e.target.dataset.lang;
+        this.els.langBtns.forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        this.scriptLang = lang;
+        safeStorage.set('chalisa_script_lang', lang);
+        this.renderVerses();
+        this.highlightCurrentVerseAndWord();
       });
-    }
-    if (this.els.chantAgainBtn) {
-      this.els.chantAgainBtn.addEventListener('click', () => {
-        this.els.completionOverlay.classList.remove('open');
-        this.resetSession();
-        this.startListening();
+    });
+
+    this.els.themeToggleBtn.addEventListener('click', () => {
+      this.theme = this.theme === 'dark' ? 'light' : 'dark';
+      safeStorage.set('chalisa_theme', this.theme);
+      this.applyTheme();
+    });
+
+    this.els.openSettingsBtn.addEventListener('click', () => {
+      this.els.settingsModal.classList.add('open');
+    });
+
+    this.els.closeSettingsBtn.addEventListener('click', () => {
+      this.els.settingsModal.classList.remove('open');
+    });
+
+    this.els.settingsModal.addEventListener('click', (e) => {
+      if (e.target === this.els.settingsModal) {
+        this.els.settingsModal.classList.remove('open');
+      }
+    });
+
+    // Settings Modal Options
+    this.els.fontDecrBtn.addEventListener('click', () => this.adjustFontSize(-1));
+    this.els.fontIncrBtn.addEventListener('click', () => this.adjustFontSize(1));
+
+    this.els.meaningLangBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const mlang = e.target.dataset.mlang;
+        this.els.meaningLangBtns.forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        this.meaningLang = mlang;
+        safeStorage.set('chalisa_meaning_lang', mlang);
+        this.renderVerses();
       });
-    }
-    if (this.els.closeCompletionBtn) {
-      this.els.closeCompletionBtn.addEventListener('click', () => {
-        this.els.completionOverlay.classList.remove('open');
+    });
+
+    this.els.autoScrollToggle.addEventListener('change', (e) => {
+      this.autoScroll = e.target.checked;
+      safeStorage.set('chalisa_autoscroll', this.autoScroll.toString());
+    });
+
+    this.els.resetAllDataBtn.addEventListener('click', () => {
+      if (confirm('Do you want to reset your chanting recitations and accuracy scores?')) {
+        this.chantCount = 0;
+        this.accuracyScores = [];
+        this.overallAccuracy = 0;
+        safeStorage.set('chalisa_chant_count', '0');
+        this.updateStatsDisplay();
+        this.els.settingsModal.classList.remove('open');
+      }
+    });
+
+    // Sankalpa Goals
+    this.els.goalPills.forEach(pill => {
+      pill.addEventListener('click', (e) => {
+        const goal = parseInt(e.target.dataset.goal, 10);
+        this.els.goalPills.forEach(p => p.classList.remove('active'));
+        e.target.classList.add('active');
+        this.sankalpaGoal = goal;
+        safeStorage.set('chalisa_sankalpa_goal', goal.toString());
+        this.updateStatsDisplay();
       });
-    }
+    });
+
+    // Jump to Top
+    this.els.hudJumpBtn.addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   }
 
-  // ==================== Meaning & Language Controls ====================
+  // Switch Active Mode: Audio | Voice | Tap
+  switchMode(mode) {
+    this.currentMode = mode;
 
-  showMobileNotice(title, desc) {
-    if (this.els.noticeTitle) this.els.noticeTitle.textContent = title;
-    if (this.els.noticeDesc) this.els.noticeDesc.textContent = desc;
-    if (this.els.mobileNoticeModal) {
-      this.els.mobileNoticeModal.classList.add('open');
+    // Reset other active processes
+    if (mode !== 'audio' && this.isAudioPlaying) {
+      this.audio.pause();
     }
-  }
-
-  closeMobileNotice() {
-    if (this.els.mobileNoticeModal) {
-      this.els.mobileNoticeModal.classList.remove('open');
+    if (mode !== 'voice' && this.isVoiceListening) {
+      this.stopVoiceListening();
     }
-  }
 
-  cycleMeaningLanguage() {
-    if (!this.showMeanings) {
-      this.showMeanings = true;
-      this.meaningLang = 'hi';
-    } else if (this.meaningLang === 'hi') {
-      this.meaningLang = 'bn';
-    } else if (this.meaningLang === 'bn') {
-      this.meaningLang = 'en';
+    // Update Nav Tabs
+    this.els.tabAudioMode.classList.toggle('active', mode === 'audio');
+    this.els.tabVoiceMode.classList.toggle('active', mode === 'voice');
+    this.els.tabTapMode.classList.toggle('active', mode === 'tap');
+
+    // Update Panels
+    this.els.audioConsolePanel.classList.toggle('active', mode === 'audio');
+    this.els.voiceConsolePanel.classList.toggle('active', mode === 'voice');
+    this.els.tapConsolePanel.classList.toggle('active', mode === 'tap');
+
+    // Update HUD & Stats
+    if (mode === 'audio') {
+      this.els.activeModeName.textContent = 'Divine Audio';
+      this.els.hudStatusLabel.textContent = this.isAudioPlaying ? 'Playing Audio' : 'Audio Mode';
+      this.els.hudTranscript.textContent = 'Hariharan Ji • Soulful Devotional Recitation';
+    } else if (mode === 'voice') {
+      this.els.activeModeName.textContent = 'AI Voice Sync';
+      this.els.hudStatusLabel.textContent = this.isVoiceListening ? 'Listening Mic' : 'Voice Mode';
+      this.els.hudTranscript.textContent = 'Chant into phone microphone for AI real-time tracking';
     } else {
-      this.showMeanings = false;
+      this.els.activeModeName.textContent = 'Tap Sync';
+      this.els.hudStatusLabel.textContent = 'Tap Counter';
+      this.els.hudTranscript.textContent = 'Tap screen to advance word-by-word with sacred vibration';
     }
-
-    safeStorage.set('hc_showMeanings', String(this.showMeanings));
-    safeStorage.set('hc_meaningLang', this.meaningLang);
-
-    if (this.els.meaningCheckbox) {
-      this.els.meaningCheckbox.checked = this.showMeanings;
-    }
-
-    this.updateMeaningButtonText();
-    this.renderChalisa();
   }
 
-  updateMeaningButtonText() {
-    if (!this.els.meaningBtnText || !this.els.toggleMeaningBtn) return;
+  // ==================== Audio Player Engine ====================
 
-    if (!this.showMeanings) {
-      this.els.meaningBtnText.textContent = 'अर्थ Off';
-      this.els.toggleMeaningBtn.classList.remove('active');
-    } else if (this.meaningLang === 'bn') {
-      this.els.meaningBtnText.textContent = 'ভাবার্থ';
-      this.els.toggleMeaningBtn.classList.add('active');
-    } else if (this.meaningLang === 'en') {
-      this.els.meaningBtnText.textContent = 'Meaning';
-      this.els.toggleMeaningBtn.classList.add('active');
+  toggleAudioPlayback() {
+    getSharedAudioContext();
+    if (this.audio.paused) {
+      this.audio.play().catch(err => {
+        console.warn('Audio play request failed:', err);
+      });
     } else {
-      this.els.meaningBtnText.textContent = 'अर्थ';
-      this.els.toggleMeaningBtn.classList.add('active');
+      this.audio.pause();
     }
   }
 
-  changeLanguage(lang) {
-    this.language = lang;
-    safeStorage.set('hc_lang', lang);
+  setAudioPlayingState(isPlaying) {
+    this.isAudioPlaying = isPlaying;
+    this.els.mainAudioPlayBtn.classList.toggle('playing', isPlaying);
+    this.els.audioPlayText.textContent = isPlaying ? 'Pause Audio' : 'Play Divine Audio';
+    this.els.hudStatusDot.classList.toggle('pulsing', isPlaying);
+    this.els.hudEqualizer.classList.toggle('active', isPlaying);
 
-    if (lang === 'bn') {
-      this.meaningLang = 'bn';
-      safeStorage.set('hc_meaningLang', 'bn');
-      this.updateMeaningButtonText();
-    } else if (lang === 'hi') {
-      this.meaningLang = 'hi';
-      safeStorage.set('hc_meaningLang', 'hi');
-      this.updateMeaningButtonText();
-    }
-
-    this.renderChalisa();
-    this.highlightCurrentLine(false);
-
-    if (this.isListening) {
-      this.stopListening();
-      setTimeout(() => this.startListening(), 250);
-    }
-    if (this.isAiChanting) {
-      this.stopAiRecitation();
-      setTimeout(() => this.startAiRecitation(), 250);
+    if (isPlaying) {
+      this.els.audioPlayIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`;
+      this.els.hudStatusLabel.textContent = 'Playing Audio';
+    } else {
+      this.els.audioPlayIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+      this.els.hudStatusLabel.textContent = 'Audio Paused';
     }
   }
 
-  applyTheme() {
-    document.documentElement.setAttribute('data-theme', this.theme);
-    if (this.els.themeToggleText) {
-      this.els.themeToggleText.textContent = this.theme === 'dark' ? '🌙 Dark Temple' : '☀️ Light Parchment';
-    }
+  setPlaybackSpeed(speed) {
+    this.playbackSpeed = speed;
+    safeStorage.set('chalisa_speed', speed.toString());
+    this.audio.playbackRate = speed;
+    this.els.paceDisplay.textContent = `${speed}x`;
+
+    this.els.speedBtns.forEach(btn => {
+      btn.classList.toggle('active', parseFloat(btn.dataset.speed) === speed);
+    });
   }
 
-  toggleTheme() {
-    this.theme = this.theme === 'dark' ? 'light' : 'dark';
-    safeStorage.set('hc_theme', this.theme);
-    this.applyTheme();
-  }
+  handleAudioTimeUpdate() {
+    const curTime = this.audio.currentTime;
+    this.updateSliderUI(curTime);
 
-  applyFontSize() {
-    document.documentElement.style.setProperty('--line-font-size', `${this.fontScale}px`);
-    if (this.els.fontSizeVal) {
-      this.els.fontSizeVal.textContent = `${this.fontScale}px`;
-    }
-  }
-
-  changeFontSize(delta) {
-    this.fontScale = Math.min(24, Math.max(13, this.fontScale + delta));
-    safeStorage.set('hc_fontScale', String(this.fontScale));
-    this.applyFontSize();
-  }
-
-  // ==================== Render Sanctuary ====================
-
-  renderChalisa() {
-    const container = this.els.chalisaContainer;
-    const displayLang = this.language === 'auto' ? 'en' : this.language;
-    const fragment = document.createDocumentFragment();
-
-    let currentVerseKey = '';
-    let currentBlock = null;
-
-    for (let i = 0; i < this.lines.length; i++) {
-      const line = this.lines[i];
-      const verseKey = `${line.verseType}-${line.verseNum}`;
-
-      if (verseKey !== currentVerseKey) {
-        currentVerseKey = verseKey;
-        currentBlock = document.createElement('div');
-        currentBlock.className = 'verse-card';
-        currentBlock.dataset.verseKey = verseKey;
-
-        // Header Label
-        const headerDiv = document.createElement('div');
-        headerDiv.className = 'verse-header';
-
-        const label = document.createElement('span');
-        label.className = 'verse-tag';
-
-        let labelText = line.verseLabel.en;
-        if (displayLang === 'hi') labelText = line.verseLabel.hi;
-        if (displayLang === 'bn') labelText = line.verseLabel.bn;
-
-        let countSuffix = '';
-        if (line.verseType === 'chaupai') {
-          countSuffix = ` • ${line.verseNum} / 40`;
-        } else if (line.verseType === 'doha-start') {
-          countSuffix = ` • ${line.verseNum} / 2`;
-        }
-
-        label.textContent = `${labelText}${countSuffix}`;
-        headerDiv.appendChild(label);
-        currentBlock.appendChild(headerDiv);
-
-        fragment.appendChild(currentBlock);
+    // Find active verse from timestamps
+    let matchedVerseIdx = 0;
+    for (let i = 0; i < VERSE_TIMESTAMPS.length; i++) {
+      const ts = VERSE_TIMESTAMPS[i];
+      if (curTime >= ts.start && curTime < ts.end) {
+        matchedVerseIdx = ts.verseIndex;
+        break;
       }
-
-      // Line Row
-      const lineEl = document.createElement('div');
-      const isPast = i < this.currentLineIndex;
-      const isCur = i === this.currentLineIndex;
-      lineEl.className = 'chalisa-line-row ' + (isPast ? 'matched' : (isCur ? 'current' : 'upcoming'));
-      lineEl.dataset.lineIndex = i;
-      lineEl.id = `line-${i}`;
-
-      lineEl.addEventListener('click', (e) => {
-        const wordEl = e.target.closest('.word-unit');
-        if (wordEl) {
-          const wIdx = parseInt(wordEl.dataset.wordIdx, 10);
-          this.jumpToWord(i, wIdx);
-        } else {
-          this.jumpToLine(i);
-        }
-      });
-
-      const textEl = document.createElement('span');
-      const fontClass = displayLang === 'hi' ? 'devanagari' : (displayLang === 'bn' ? 'bengali' : '');
-      textEl.className = `line-content ${fontClass}`;
-
-      // Render tokens
-      const tokens = line.wordTokens;
-      textEl.innerHTML = tokens.map((token, wIdx) => {
-        let wordDisplay = token.en;
-        if (displayLang === 'hi') wordDisplay = token.hi;
-        if (displayLang === 'bn') wordDisplay = token.bn;
-
-        const isChanted = isPast || (isCur && wIdx < this.currentWordIdx);
-        return `<span class="word-unit ${isChanted ? 'chanted' : ''}" data-word-idx="${wIdx}" data-line-idx="${i}">${wordDisplay}</span>`;
-      }).join(' ');
-
-      lineEl.appendChild(textEl);
-
-      // Line score chip
-      const chip = document.createElement('span');
-      chip.className = 'line-status-chip';
-      if (isPast) {
-        const sc = this.lineScores[i] !== undefined ? Math.round(this.lineScores[i] * 100) : 100;
-        chip.textContent = `✓ ${sc}%`;
-        chip.classList.add('done');
-      }
-      lineEl.appendChild(chip);
-
-      currentBlock.appendChild(lineEl);
-
-      // Meaning Box under last line of verse
-      if (line.lineInVerse === 2 && line.meaning && this.showMeanings) {
-        const meaningDiv = document.createElement('div');
-        meaningDiv.className = 'verse-meaning';
-
-        let mainMeaningHtml = '';
-        if (this.meaningLang === 'bn' && line.meaning.bn) {
-          mainMeaningHtml = `<div class="meaning-primary"><strong>ভাবার্থ:</strong> ${line.meaning.bn}</div>`;
-        } else if (this.meaningLang === 'en' && line.meaning.en) {
-          mainMeaningHtml = `<div class="meaning-primary"><strong>Meaning:</strong> ${line.meaning.en}</div>`;
-        } else {
-          mainMeaningHtml = `<div class="meaning-primary"><strong>अर्थ:</strong> ${line.meaning.hi}</div>`;
-        }
-
-        meaningDiv.innerHTML = mainMeaningHtml;
-        currentBlock.appendChild(meaningDiv);
+      if (curTime >= ts.end) {
+        matchedVerseIdx = Math.min(this.totalVerses - 1, ts.verseIndex + 1);
       }
     }
 
-    container.innerHTML = '';
-    container.appendChild(fragment);
-    this.updateProgress();
+    if (matchedVerseIdx !== this.currentVerseIndex) {
+      this.currentVerseIndex = matchedVerseIdx;
+      this.onVerseChanged();
+    }
+
+    // Calculate line & word within current verse
+    const ts = VERSE_TIMESTAMPS[this.currentVerseIndex];
+    if (ts) {
+      const duration = ts.end - ts.start;
+      const elapsed = Math.max(0, curTime - ts.start);
+      const half = duration / 2;
+
+      const lineIdx = elapsed < half ? 0 : 1;
+      const lineElapsed = elapsed < half ? elapsed : (elapsed - half);
+      const lineFraction = Math.min(0.99, Math.max(0, lineElapsed / half));
+
+      // Get line word elements
+      const lineElem = document.getElementById(`line-${this.currentVerseIndex}-${lineIdx}`);
+      if (lineElem) {
+        const words = lineElem.querySelectorAll('.word-token');
+        if (words.length > 0) {
+          const wIdx = Math.floor(lineFraction * words.length);
+          this.highlightActiveWord(this.currentVerseIndex, lineIdx, wIdx);
+        }
+      }
+    }
   }
 
-  // ==================== Navigation & Jump ====================
+  updateSliderUI(curTime) {
+    this.els.audioProgressSlider.value = curTime;
+    const pct = (curTime / this.audioDuration) * 100;
+    this.els.sliderFillBar.style.width = `${pct}%`;
+    this.els.audioCurrentTime.textContent = this.formatSeconds(curTime);
+  }
 
-  buildJumpModal() {
-    if (!this.els.jumpGrid) return;
-    const fragment = document.createDocumentFragment();
+  formatSeconds(sec) {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
 
-    CHALISA_DATA.verses.forEach((verse, vIdx) => {
-      const btn = document.createElement('button');
-      btn.className = 'verse-jump-btn';
+  handleAudioEnded() {
+    this.chantCount++;
+    safeStorage.set('chalisa_chant_count', this.chantCount.toString());
+    this.updateStatsDisplay();
 
-      let title = '';
-      if (verse.type === 'chaupai') {
-        title = `Chaupai ${verse.num}`;
-      } else if (verse.type === 'doha-start') {
-        title = `Doha ${verse.num}`;
-      } else {
-        title = `Closing Doha`;
-      }
+    // Check Sankalpa Completion
+    if (this.chantCount >= this.sankalpaGoal) {
+      this.playSacredVictoryChime();
+      alert(`🎉 Sacred Sankalpa Completed!\nYou have completed ${this.chantCount} recitations of Shri Hanuman Chalisa.`);
+    }
 
-      btn.innerHTML = `<span>${title}</span>`;
-      btn.addEventListener('click', () => {
-        const targetLine = this.lines.findIndex(l => l.verseIndex === vIdx + 1);
-        if (targetLine !== -1) {
-          this.jumpToLine(targetLine);
-        }
-        this.closeJumpModal();
-      });
+    if (this.isLooping || this.chantCount < this.sankalpaGoal) {
+      this.audio.currentTime = 0;
+      this.jumpToVerse(0);
+      this.audio.play().catch(() => {});
+    } else {
+      this.setAudioPlayingState(false);
+    }
+  }
 
-      fragment.appendChild(btn);
+  jumpToVerse(vIdx) {
+    this.currentVerseIndex = vIdx;
+    this.currentLineIndex = 0;
+    this.currentWordIndex = 0;
+
+    const ts = VERSE_TIMESTAMPS[vIdx];
+    if (ts && this.currentMode === 'audio') {
+      this.audio.currentTime = ts.start;
+      this.updateSliderUI(ts.start);
+    }
+
+    this.onVerseChanged();
+    this.highlightActiveWord(vIdx, 0, 0);
+  }
+
+  onVerseChanged() {
+    // Highlight Card
+    document.querySelectorAll('.verse-card').forEach((card, idx) => {
+      card.classList.toggle('active-verse', idx === this.currentVerseIndex);
     });
 
-    this.els.jumpGrid.innerHTML = '';
-    this.els.jumpGrid.appendChild(fragment);
-  }
+    const activeCard = document.getElementById(`verseCard-${this.currentVerseIndex}`);
+    if (activeCard && this.autoScroll) {
+      activeCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 
-  openJumpModal() {
-    if (this.els.jumpModal) {
-      this.els.jumpModal.classList.add('open');
-      const curLine = this.lines[this.currentLineIndex];
-      if (curLine) {
-        const buttons = this.els.jumpGrid.querySelectorAll('.verse-jump-btn');
-        buttons.forEach((btn, idx) => {
-          btn.classList.toggle('active', idx + 1 === curLine.verseIndex);
-        });
-      }
+    // Update Stats Badge
+    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
+    if (verseObj) {
+      const typeLabel = verseObj.type.includes('doha') ? 'Doha' : 'Chaupai';
+      this.els.verseIndicatorDisplay.textContent = `${typeLabel} ${verseObj.num}`;
+      this.els.verseSubCount.textContent = `${this.currentVerseIndex + 1} of ${this.totalVerses} Verses`;
+
+      // Update HUD Lyrics Preview
+      const lineText = verseObj.lines[0][this.scriptLang] || verseObj.lines[0].hi;
+      this.els.hudTranscript.textContent = lineText;
     }
   }
 
-  closeJumpModal() {
-    if (this.els.jumpModal) this.els.jumpModal.classList.remove('open');
-  }
+  highlightActiveWord(vIdx, lIdx, wIdx) {
+    // Clear previous glowing words
+    document.querySelectorAll('.word-token.glowing').forEach(el => el.classList.remove('glowing'));
 
-  jumpToLine(index) {
-    if (index < 0 || index >= this.totalLines) return;
-    this.currentLineIndex = index;
-    this.currentWordIdx = 0;
-    safeStorage.set('hc_currentLine', String(this.currentLineIndex));
-
-    for (let i = 0; i < this.totalLines; i++) {
-      const el = document.getElementById(`line-${i}`);
-      if (el) {
-        el.className = 'chalisa-line-row ' + (i < this.currentLineIndex ? 'matched' : (i === this.currentLineIndex ? 'current' : 'upcoming'));
-        const chip = el.querySelector('.line-status-chip');
-        if (i < this.currentLineIndex) {
-          if (chip) { chip.textContent = '✓ 100%'; chip.classList.add('done'); }
-          el.querySelectorAll('.word-unit').forEach(w => w.classList.add('chanted'));
-        } else if (i === this.currentLineIndex) {
-          if (chip) { chip.textContent = ''; chip.classList.remove('done'); }
-          el.querySelectorAll('.word-unit').forEach(w => w.classList.remove('chanted'));
-        } else {
-          if (chip) { chip.textContent = ''; chip.classList.remove('done'); }
-          el.querySelectorAll('.word-unit').forEach(w => w.classList.remove('chanted'));
-        }
-      }
+    const wordEl = document.getElementById(`word-${vIdx}-${lIdx}-${wIdx}`);
+    if (wordEl) {
+      wordEl.classList.add('glowing');
     }
 
-    this.highlightCurrentLine(true);
-    this.updateProgress();
-  }
-
-  jumpToWord(lineIdx, wordIdx) {
-    if (lineIdx !== this.currentLineIndex) {
-      this.jumpToLine(lineIdx);
-    }
-    this.currentWordIdx = wordIdx;
-    const lineEl = document.getElementById(`line-${lineIdx}`);
+    // Highlight line
+    document.querySelectorAll('.verse-line.active-line').forEach(el => el.classList.remove('active-line'));
+    const lineEl = document.getElementById(`line-${vIdx}-${lIdx}`);
     if (lineEl) {
-      lineEl.querySelectorAll('.word-unit').forEach((w, idx) => {
-        w.classList.toggle('chanted', idx < wordIdx);
-      });
+      lineEl.classList.add('active-line');
     }
   }
 
-  // ==================== MODE 1: Fresh-Instance Mobile Speech Engine ====================
+  highlightCurrentVerseAndWord() {
+    this.onVerseChanged();
+    this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, this.currentWordIndex);
+  }
 
-  toggleListening() {
-    if (this.isListening) {
-      this.stopListening();
+  // ==================== AI Voice Sync Engine ====================
+
+  async toggleVoiceListening() {
+    if (this.isVoiceListening) {
+      this.stopVoiceListening();
     } else {
-      this.startListening();
+      await this.startVoiceListening();
     }
   }
 
-  createFreshRecognition() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return null;
-
-    const rec = new SpeechRecognition();
-    rec.continuous = !this.isMobile;
-    rec.interimResults = true;
-    rec.maxAlternatives = 3;
-    rec.lang = this.language === 'bn' ? 'bn-IN' : 'hi-IN';
-
-    rec.onstart = () => {
-      this.els.micDot.classList.add('live');
-      this.els.micLabel.textContent = 'Mic Active';
-      this.els.startBtnText.textContent = 'Stop Voice';
-      this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
-    };
-
-    rec.onresult = (event) => {
-      let fullTranscript = '';
-      for (let i = 0; i < event.results.length; i++) {
-        fullTranscript += event.results[i][0].transcript + ' ';
-      }
-
-      const heard = fullTranscript.trim();
-      if (heard) {
-        this.pulseEqualizerBars();
-        this.els.transcriptText.textContent = `Heard: "${heard.slice(-45)}"`;
-        this.matchSpokenSpeech(heard);
-      }
-    };
-
-    rec.onerror = (e) => {
-      if (e.error === 'no-speech') return;
-      console.warn('Speech error:', e.error);
-      if (e.error === 'not-allowed') {
-        this.stopListening();
-        this.showMobileNotice(
-          'Microphone Permission Required',
-          'Microphone access was blocked. Please tap the lock icon 🔒 in your browser address bar and choose "Allow Microphone", or use Listen & Learn or Tap Sync.'
-        );
-      }
-    };
-
-    rec.onend = () => {
-      // Create a FRESH instance to prevent InvalidStateError on Android & iOS
-      if (this.isListening) {
-        setTimeout(() => {
-          if (this.isListening) {
-            try {
-              this.recognition = this.createFreshRecognition();
-              if (this.recognition) this.recognition.start();
-            } catch (err) {
-              console.warn('Auto-restart exception:', err);
-            }
-          }
-        }, 80);
-      }
-    };
-
-    return rec;
-  }
-
-  async startListening() {
-    const hasCapSpeech = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition);
-    const WebSpeech = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-    if (!hasCapSpeech && !WebSpeech) {
-      this.showMobileNotice(
-        'Speech Recognition Unavailable',
-        'Your current browser restricts Web Speech Recognition. For live AI Voice chanting, open this link in Google Chrome on Android or use our installed Android APK!'
-      );
-      return;
-    }
-
-    if (this.isAiChanting) {
-      this.stopAiRecitation();
-    }
-
-    this.isListening = true;
-    this.els.startBtn.classList.add('listening');
-    this.els.startBtnText.textContent = 'Starting Mic...';
-    this.els.micDot.classList.add('live');
-    this.els.micLabel.textContent = 'Connecting...';
-    this.els.transcriptText.textContent = '🎙️ Please allow mic permission if prompted...';
-
-    // 1. Native Android Speech Recognition inside APK
-    if (hasCapSpeech) {
-      try {
-        const permStatus = await window.Capacitor.Plugins.SpeechRecognition.checkPermissions();
-        if (!permStatus || permStatus.speechRecognition !== 'granted') {
-          const req = await window.Capacitor.Plugins.SpeechRecognition.requestPermissions();
-          if (!req || req.speechRecognition !== 'granted') {
-            this.stopListening();
-            this.showMobileNotice(
-              'Microphone Permission Required',
-              'Please grant microphone permission to enable AI Voice Chanting in the app.'
-            );
-            return;
-          }
-        }
-
-        this.els.micLabel.textContent = 'Mic Active';
-        this.els.startBtnText.textContent = 'Stop Voice';
-        this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
-
-        await window.Capacitor.Plugins.SpeechRecognition.removeAllListeners();
-        await window.Capacitor.Plugins.SpeechRecognition.addListener('partialResults', (data) => {
-          if (data && data.matches && data.matches.length > 0) {
-            const heard = data.matches[0];
-            this.pulseEqualizerBars();
-            this.els.transcriptText.textContent = `Heard: "${heard.slice(-45)}"`;
-            this.matchSpokenSpeech(heard);
-          }
-        });
-
-        await window.Capacitor.Plugins.SpeechRecognition.start({
-          language: this.language === 'bn' ? 'bn-IN' : 'hi-IN',
-          maxResults: 5,
-          prompt: 'Chant Shri Hanuman Chalisa',
-          partialResults: true,
-          popup: false
-        });
-
-        this.startEqualizerAnimation();
-        this.highlightCurrentLine(true);
-        return;
-      } catch (err) {
-        console.warn('Native speech recognition fallback to Web Speech:', err);
-      }
-    }
-
-    // 2. Web Browser Speech Recognition
+  async startVoiceListening() {
     try {
-      this.recognition = this.createFreshRecognition();
-      if (this.recognition) {
-        this.recognition.start();
+      // 1. Request Microphone Stream for Live Visualizer
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        this.setupMicVisualizer(this.micStream);
       }
-    } catch (err) {
-      console.warn('Recognition start exception:', err);
-      this.stopListening();
-      this.showMobileNotice(
-        'Microphone Access Needed',
-        'Could not start microphone. Please check your browser microphone permissions.'
-      );
-    }
 
-    this.startEqualizerAnimation();
-    this.highlightCurrentLine(true);
+      // 2. Setup Speech Recognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        alert('Speech Recognition is not supported directly in this web browser. Please use Chrome on Android/Laptop, or use the Divine Audio & Tap Sync modes.');
+        return;
+      }
+
+      this.recognition = new SpeechRecognition();
+      this.recognition.continuous = true;
+      this.recognition.interimResults = true;
+      this.recognition.lang = this.scriptLang === 'bn' ? 'bn-IN' : 'hi-IN';
+
+      this.recognition.onstart = () => {
+        this.isVoiceListening = true;
+        this.els.toggleVoiceBtn.classList.add('recording');
+        this.els.voiceBtnText.textContent = 'Stop AI Voice Sync';
+        this.els.voiceWaveBars.classList.add('active');
+        this.els.hudStatusDot.classList.add('pulsing');
+        this.els.hudStatusLabel.textContent = 'Listening Voice...';
+        this.els.voiceHeardText.textContent = 'Chant into microphone: "जय हनुमान ज्ञान गुन सागर..."';
+      };
+
+      this.recognition.onresult = (event) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        this.handleHeardSpeech(transcript);
+      };
+
+      this.recognition.onerror = (err) => {
+        console.warn('Speech Recognition error:', err);
+      };
+
+      this.recognition.onend = () => {
+        if (this.isVoiceListening) {
+          // Restart recognition continuously
+          try { this.recognition.start(); } catch (e) {}
+        }
+      };
+
+      this.recognition.start();
+
+    } catch (err) {
+      console.error('Microphone access denied or failed:', err);
+      alert('Please allow microphone permissions to use AI Voice Sync.');
+    }
   }
 
-  stopListening() {
-    this.isListening = false;
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
-      try {
-        window.Capacitor.Plugins.SpeechRecognition.stop();
-        window.Capacitor.Plugins.SpeechRecognition.removeAllListeners();
-      } catch (e) {}
-    }
+  stopVoiceListening() {
+    this.isVoiceListening = false;
     if (this.recognition) {
       try { this.recognition.stop(); } catch (e) {}
       this.recognition = null;
-    }
-
-    this.stopEqualizerAnimation();
-
-    this.els.startBtn.classList.remove('listening');
-    this.els.startBtnText.textContent = 'AI Voice Sync';
-    this.els.micDot.classList.remove('live');
-    this.els.micLabel.textContent = 'Ready to Chant';
-  }
-
-  // ==================== Equalizer Animation (Zero Hardware Lock) ====================
-
-  startEqualizerAnimation() {
-    // Desktop only Web Audio analyser (avoids microphone hardware lock on mobile)
-    if (!this.isMobile && !this.audioCtx) {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        this.audioCtx = new AudioCtx();
-        this.analyser = this.audioCtx.createAnalyser();
-        this.analyser.fftSize = 64;
-
-        navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-          this.micStream = stream;
-          const source = this.audioCtx.createMediaStreamSource(stream);
-          source.connect(this.analyser);
-
-          const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
-          const drawBars = () => {
-            if (!this.isListening) return;
-            this.analyser.getByteFrequencyData(dataArray);
-
-            if (this.els.eqBars) {
-              for (let b = 0; b < this.els.eqBars.length; b++) {
-                const val = dataArray[b * 2] || 0;
-                const height = Math.max(3, Math.round((val / 255) * 19));
-                this.els.eqBars[b].style.height = `${height}px`;
-              }
-            }
-            this.animFrameId = requestAnimationFrame(drawBars);
-          };
-          drawBars();
-        }).catch(() => {});
-      } catch (e) {}
-    }
-  }
-
-  pulseEqualizerBars() {
-    if (!this.els.eqBars) return;
-    for (let b = 0; b < this.els.eqBars.length; b++) {
-      const h = Math.floor(Math.random() * 16) + 4;
-      this.els.eqBars[b].style.height = `${h}px`;
-    }
-    setTimeout(() => {
-      if (this.els.eqBars) {
-        this.els.eqBars.forEach(b => b.style.height = '3px');
-      }
-    }, 220);
-  }
-
-  stopEqualizerAnimation() {
-    if (this.animFrameId) {
-      cancelAnimationFrame(this.animFrameId);
-      this.animFrameId = null;
     }
     if (this.micStream) {
       this.micStream.getTracks().forEach(t => t.stop());
       this.micStream = null;
     }
-    if (this.audioCtx) {
-      try { this.audioCtx.close(); } catch (e) {}
-      this.audioCtx = null;
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
     }
-    if (this.els.eqBars) {
-      this.els.eqBars.forEach(b => b.style.height = '3px');
-    }
+
+    this.els.toggleVoiceBtn.classList.remove('recording');
+    this.els.voiceBtnText.textContent = 'Start AI Voice Sync';
+    this.els.voiceWaveBars.classList.remove('active');
+    this.els.hudStatusLabel.textContent = 'Voice Paused';
+    this.els.voiceHeardText.textContent = 'Chanting paused. Tap "Start AI Voice Sync" to resume.';
   }
 
-  // ==================== Awadhi-to-Hindi Speech Matcher (Fast & Slow Chanting) ====================
+  setupMicVisualizer(stream) {
+    const ctx = getSharedAudioContext();
+    if (!ctx) return;
 
-  matchSpokenSpeech(spokenString) {
-    if (this.currentLineIndex >= this.totalLines) return;
+    const source = ctx.createMediaStreamSource(stream);
+    this.micAnalyser = ctx.createAnalyser();
+    this.micAnalyser.fftSize = 32;
+    source.connect(this.micAnalyser);
 
-    const currentLine = this.lines[this.currentLineIndex];
-    const targetTokens = currentLine.wordTokens;
+    const bufferLength = this.micAnalyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    const bars = this.els.voiceWaveBars.querySelectorAll('.wave-bar');
 
-    // Tokenize spoken input
-    const spokenWords = spokenString.trim().split(/\s+/).map(w => {
-      return {
-        raw: w.toLowerCase(),
-        phonetic: scriptToPhonetic(w),
-        skeleton: phoneticSkeleton(w)
-      };
-    });
+    const updateBars = () => {
+      if (!this.isVoiceListening) return;
+      this.micAnalyser.getByteFrequencyData(dataArray);
 
-    let matchedAny = false;
+      bars.forEach((bar, idx) => {
+        const val = dataArray[idx % bufferLength] || 10;
+        const height = Math.max(6, (val / 255) * 26);
+        bar.style.height = `${height}px`;
+      });
 
-    for (const sw of spokenWords) {
-      for (let tIdx = this.currentWordIdx; tIdx < Math.min(this.currentWordIdx + 3, targetTokens.length); tIdx++) {
-        const target = targetTokens[tIdx];
-
-        const isExact = (sw.raw === target.en.toLowerCase()) || 
-                        (sw.raw === target.hi.toLowerCase()) ||
-                        (sw.raw === target.bn.toLowerCase());
-
-        const isSkeleton = sw.skeleton.length >= 2 && target.skeleton.length >= 2 &&
-                           ((sw.skeleton === target.skeleton) || 
-                            sw.skeleton.includes(target.skeleton) || 
-                            target.skeleton.includes(sw.skeleton));
-
-        const isPhonetic = sw.phonetic.length >= 2 && target.phonetic.length >= 2 &&
-                           (sw.phonetic.includes(target.phonetic) || target.phonetic.includes(sw.phonetic));
-
-        // Prefix match for slow or soft chanting ("dhire se bolna")
-        const isPrefix = sw.phonetic.length >= 2 && target.phonetic.startsWith(sw.phonetic);
-
-        if (isExact || isSkeleton || isPhonetic || isPrefix) {
-          const skipped = tIdx - this.currentWordIdx;
-          if (skipped > 0) {
-            this.totalAttemptedWords += skipped;
-          }
-
-          for (let k = this.currentWordIdx; k <= tIdx; k++) {
-            this.highlightWord(this.currentLineIndex, k);
-            this.totalMatchedWords++;
-            this.totalAttemptedWords++;
-          }
-
-          this.currentWordIdx = tIdx + 1;
-          matchedAny = true;
-
-          const displayWord = this.language === 'hi' ? target.hi : (this.language === 'bn' ? target.bn : target.en);
-          this.els.transcriptText.textContent = `✓ Chanted: "${displayWord}" (${this.currentWordIdx}/${targetTokens.length})`;
-          break;
-        }
-      }
-    }
-
-    if (matchedAny) {
-      this.calculateRealtimeAccuracy();
-    }
-
-    // Line completion: all words chanted or at least 75%
-    if (this.currentWordIdx >= targetTokens.length || (targetTokens.length >= 4 && this.currentWordIdx >= Math.ceil(targetTokens.length * 0.75))) {
-      this.completeCurrentLine();
-    }
-  }
-
-  // ==================== MODE 2: Devotional Audio Recitation (All Languages & Speeds) ====================
-
-  toggleAiRecitation() {
-    this.playSoftNote();
-    if (this.speechSynth && this.speechSynth.paused) {
-      try { this.speechSynth.resume(); } catch (e) {}
-    }
-    if (this.isAiChanting) {
-      this.stopAiRecitation();
-    } else {
-      this.startAiRecitation();
-    }
-  }
-
-  startAiRecitation() {
-    if (this.isListening) {
-      this.stopListening();
-    }
-
-    this.isAiChanting = true;
-    this.els.aiAutoChantBtn.classList.add('active');
-    this.els.aiAutoChantText.textContent = 'Pause Chant';
-    this.els.micDot.classList.add('live');
-    this.els.micLabel.textContent = 'Audio Reciting';
-
-    this.reciteCurrentLineAudio();
-  }
-
-  stopAiRecitation() {
-    this.isAiChanting = false;
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech) {
-      try { window.Capacitor.Plugins.TextToSpeech.stop(); } catch (e) {}
-    }
-    if (this.speechSynth) {
-      try { this.speechSynth.cancel(); } catch (e) {}
-    }
-    if (this.aiKaraokeTimer) {
-      clearTimeout(this.aiKaraokeTimer);
-      this.aiKaraokeTimer = null;
-    }
-
-    this.els.aiAutoChantBtn.classList.remove('active');
-    this.els.aiAutoChantText.textContent = 'Listen & Learn';
-    this.els.micDot.classList.remove('live');
-    this.els.micLabel.textContent = 'Ready to Chant';
-  }
-
-  async reciteCurrentLineAudio() {
-    if (!this.isAiChanting || this.currentLineIndex >= this.totalLines) {
-      if (this.currentLineIndex >= this.totalLines) this.handleCompletion();
-      this.stopAiRecitation();
-      return;
-    }
-
-    const line = this.lines[this.currentLineIndex];
-    const displayLang = this.language === 'auto' ? 'en' : this.language;
-    const tokens = line.wordTokens;
-
-    let vocalText = line.hi;
-    let langCode = 'hi-IN';
-    if (displayLang === 'bn') {
-      vocalText = line.bn;
-      langCode = 'bn-IN';
-    } else if (displayLang === 'en') {
-      vocalText = line.en.replace(/[|]/g, '').trim();
-      langCode = 'en-IN';
-    }
-
-    this.els.transcriptText.textContent = `🎵 Chanting: "${vocalText}"`;
-
-    // 1. Native Android TTS in APK (High-fidelity, smooth speech)
-    const hasCapTts = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech);
-    if (hasCapTts) {
-      try {
-        let wIdx = 0;
-        const totalDurationMs = Math.max(2000, tokens.length * 560) / this.recitationSpeed;
-        const stepTime = totalDurationMs / tokens.length;
-
-        const wordIntervalId = setInterval(() => {
-          if (!this.isAiChanting || wIdx >= tokens.length) {
-            clearInterval(wordIntervalId);
-            return;
-          }
-          this.highlightWord(this.currentLineIndex, wIdx);
-          wIdx++;
-          this.totalMatchedWords++;
-          this.totalAttemptedWords++;
-          this.calculateRealtimeAccuracy();
-        }, stepTime);
-
-        await window.Capacitor.Plugins.TextToSpeech.speak({
-          text: vocalText,
-          lang: langCode,
-          rate: this.recitationSpeed * 0.85,
-          pitch: 1.0,
-          volume: 1.0
-        });
-
-        clearInterval(wordIntervalId);
-        while (wIdx < tokens.length) {
-          this.highlightWord(this.currentLineIndex, wIdx);
-          wIdx++;
-        }
-
-        if (!this.isAiChanting) return;
-        this.completeCurrentLine();
-        this.aiKaraokeTimer = setTimeout(() => {
-          if (this.isAiChanting) this.reciteCurrentLineAudio();
-        }, 320);
-        return;
-      } catch (err) {
-        console.warn('Capacitor TTS fallback to Web Speech:', err);
-      }
-    }
-
-    // 2. Web Browser Speech Synthesis
-    if (this.speechSynth) {
-      try {
-        this.speechSynth.cancel();
-        if (this.speechSynth.paused) this.speechSynth.resume();
-
-        const utter = new SpeechSynthesisUtterance(vocalText);
-        utter.rate = this.recitationSpeed * 0.82;
-        utter.pitch = 1.0;
-        utter.lang = langCode;
-
-        let wIdx = 0;
-        utter.onboundary = (e) => {
-          if (e.name === 'word' && wIdx < tokens.length) {
-            this.highlightWord(this.currentLineIndex, wIdx);
-            wIdx++;
-            this.totalMatchedWords++;
-            this.totalAttemptedWords++;
-            this.calculateRealtimeAccuracy();
-          }
-        };
-
-        utter.onend = () => {
-          if (!this.isAiChanting) return;
-          this.completeCurrentLine();
-          setTimeout(() => {
-            if (this.isAiChanting) this.reciteCurrentLineAudio();
-          }, 320);
-        };
-
-        utter.onerror = () => {
-          this.runCalibratedKaraoke(tokens);
-        };
-
-        this.speechSynth.speak(utter);
-      } catch (e) {
-        this.runCalibratedKaraoke(tokens);
-      }
-    } else {
-      this.runCalibratedKaraoke(tokens);
-    }
-  }
-
-  // Calibrated Karaoke Engine (Perfect synchronization at 0.75x, 1.0x, 1.25x, 1.5x)
-  runCalibratedKaraoke(tokens) {
-    let wIdx = 0;
-
-    const stepWord = () => {
-      if (!this.isAiChanting) return;
-
-      if (wIdx < tokens.length) {
-        const token = tokens[wIdx];
-        this.highlightWord(this.currentLineIndex, wIdx);
-        wIdx++;
-        this.totalMatchedWords++;
-        this.totalAttemptedWords++;
-        this.calculateRealtimeAccuracy();
-
-        // Calculate proportional word duration based on character length
-        const charLen = (token.hi || token.en || 'word').length;
-        const baseDuration = Math.max(380, Math.min(1050, charLen * 130));
-        const wordInterval = Math.round(baseDuration / this.recitationSpeed);
-
-        this.aiKaraokeTimer = setTimeout(stepWord, wordInterval);
-      } else {
-        this.completeCurrentLine();
-        this.aiKaraokeTimer = setTimeout(() => {
-          if (this.isAiChanting) this.reciteCurrentLineAudio();
-        }, 320);
-      }
+      this.animFrameId = requestAnimationFrame(updateBars);
     };
 
-    stepWord();
+    updateBars();
   }
 
-  // ==================== MODE 3: Tap-to-Chant (Zero Lag Touch / Mala) ====================
+  handleHeardSpeech(transcript) {
+    const heardClean = transcript.trim();
+    if (!heardClean) return;
 
-  advanceWordOrLine() {
-    if (this.currentLineIndex >= this.totalLines) return;
+    this.els.voiceHeardText.textContent = `Heard: "${heardClean}"`;
+    this.els.hudTranscript.textContent = `Chanting: "${heardClean}"`;
 
-    this.playSoftNote();
-    if (navigator.vibrate) {
-      try { navigator.vibrate(28); } catch (e) {}
-    }
+    // Match with current verse words
+    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
+    if (!verseObj) return;
 
-    const line = this.lines[this.currentLineIndex];
-    const tokens = line.wordTokens;
+    const currentLine = verseObj.lines[this.currentLineIndex];
+    const targetText = currentLine.hi || currentLine.en;
+    const targetWords = targetText.split(/\s+/).filter(w => w.trim().length > 0);
 
-    if (this.currentWordIdx < tokens.length) {
-      this.highlightWord(this.currentLineIndex, this.currentWordIdx);
-      this.currentWordIdx++;
-      this.totalMatchedWords++;
-      this.totalAttemptedWords++;
-      this.calculateRealtimeAccuracy();
-
-      const lastWord = tokens[this.currentWordIdx - 1];
-      const displayWord = this.language === 'hi' ? lastWord.hi : (this.language === 'bn' ? lastWord.bn : lastWord.en);
-      this.els.transcriptText.textContent = `✓ Chanted: "${displayWord}" (${this.currentWordIdx}/${tokens.length})`;
-
-      if (this.currentWordIdx >= tokens.length) {
-        setTimeout(() => this.completeCurrentLine(), 140);
+    // Check fuzzy match
+    let matchesCount = 0;
+    targetWords.forEach((tw, idx) => {
+      const cleanW = tw.replace(/[॥।|,]/g, '').trim().toLowerCase();
+      if (heardClean.toLowerCase().includes(cleanW)) {
+        matchesCount++;
+        const wordEl = document.getElementById(`word-${this.currentVerseIndex}-${this.currentLineIndex}-${idx}`);
+        if (wordEl) {
+          wordEl.classList.add('glowing');
+        }
       }
+    });
+
+    const lineAccuracy = Math.min(100, Math.round((matchesCount / Math.max(1, targetWords.length)) * 100));
+    if (lineAccuracy >= 60 || matchesCount >= 2) {
+      // Advance to next line
+      this.recordAccuracy(lineAccuracy);
+      this.advanceLine();
+    }
+  }
+
+  advanceLine() {
+    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
+    if (this.currentLineIndex === 0 && verseObj.lines.length > 1) {
+      this.currentLineIndex = 1;
+      this.currentWordIndex = 0;
+      this.highlightActiveWord(this.currentVerseIndex, 1, 0);
     } else {
-      this.completeCurrentLine();
-    }
-  }
-
-  // ==================== Word & Line Updates ====================
-
-  highlightWord(lineIdx, wordIdx) {
-    const lineEl = document.getElementById(`line-${lineIdx}`);
-    if (!lineEl) return;
-    const span = lineEl.querySelector(`.word-unit[data-word-idx="${wordIdx}"]`);
-    if (span) {
-      span.classList.add('chanted');
-    }
-  }
-
-  completeCurrentLine() {
-    const lineEl = document.getElementById(`line-${this.currentLineIndex}`);
-    const line = this.lines[this.currentLineIndex];
-    const totalTokens = line.wordTokens.length;
-
-    const lineAcc = this.currentWordIdx > 0 ? Math.min(1.0, this.currentWordIdx / totalTokens) : 1.0;
-    this.lineScores[this.currentLineIndex] = lineAcc;
-
-    if (lineEl) {
-      lineEl.className = 'chalisa-line-row matched';
-      lineEl.querySelectorAll('.word-unit').forEach(w => w.classList.add('chanted'));
-
-      const chip = lineEl.querySelector('.line-status-chip');
-      if (chip) {
-        chip.textContent = `✓ ${Math.round(lineAcc * 100)}%`;
-        chip.classList.add('done');
+      // Advance to next verse
+      if (this.currentVerseIndex < this.totalVerses - 1) {
+        this.jumpToVerse(this.currentVerseIndex + 1);
+      } else {
+        // Complete full chalisa
+        this.handleAudioEnded();
       }
     }
+  }
 
+  recordAccuracy(score) {
+    this.accuracyScores.push(score);
+    const sum = this.accuracyScores.reduce((a, b) => a + b, 0);
+    this.overallAccuracy = Math.round(sum / this.accuracyScores.length);
+    this.updateStatsDisplay();
+
+    // Display on verse card
+    const accEl = document.getElementById(`verseAcc-${this.currentVerseIndex}`);
+    if (accEl) {
+      accEl.textContent = `✓ ${score}%`;
+    }
+  }
+
+  // ==================== Tap Sync Engine ====================
+
+  handleTapAdvance() {
+    getSharedAudioContext();
     this.playDivineChime();
 
-    this.currentLineIndex++;
-    this.currentWordIdx = 0;
-    safeStorage.set('hc_currentLine', String(this.currentLineIndex));
+    if (navigator.vibrate) {
+      try { navigator.vibrate(25); } catch (e) {}
+    }
 
-    this.highlightCurrentLine(true);
-    this.updateProgress();
+    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
+    const lineObj = verseObj.lines[this.currentLineIndex];
+    const words = (lineObj[this.scriptLang] || lineObj.hi).split(/\s+/).filter(w => w.trim().length > 0);
 
-    if (this.currentLineIndex >= this.totalLines) {
-      this.handleCompletion();
+    this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, this.currentWordIndex);
+
+    this.currentWordIndex++;
+    if (this.currentWordIndex >= words.length) {
+      this.currentWordIndex = 0;
+      this.advanceLine();
     }
   }
 
-  highlightCurrentLine(smoothScroll = true) {
-    document.querySelectorAll('.chalisa-line-row.current').forEach(el => {
-      el.classList.remove('current');
-      el.classList.add('upcoming');
-    });
-
-    if (this.currentLineIndex >= this.totalLines) return;
-
-    const lineEl = document.getElementById(`line-${this.currentLineIndex}`);
-    if (!lineEl) return;
-
-    lineEl.classList.remove('upcoming');
-    lineEl.classList.add('current');
-
-    lineEl.scrollIntoView({
-      behavior: smoothScroll ? 'smooth' : 'auto',
-      block: 'center'
-    });
-  }
-
-  // ==================== Accuracy Calculation ====================
-
-  calculateRealtimeAccuracy() {
-    if (this.totalAttemptedWords === 0) {
-      this.els.accuracyScore.textContent = '100%';
-      this.updateAccuracyBadge(100);
-      return;
-    }
-
-    const accuracy = Math.min(100, Math.max(50, Math.round((this.totalMatchedWords / this.totalAttemptedWords) * 100)));
-    this.els.accuracyScore.textContent = `${accuracy}%`;
-    this.updateAccuracyBadge(accuracy);
-  }
-
-  updateAccuracyBadge(score) {
-    const badge = this.els.accuracyBadge;
-    if (!badge) return;
-
-    badge.className = 'stat-sub';
-    if (score >= 95) {
-      badge.textContent = 'Divya 🌟';
-      badge.classList.add('badge-divya');
-    } else if (score >= 85) {
-      badge.textContent = 'Shuddha ✨';
-      badge.classList.add('badge-shuddha');
-    } else if (score >= 70) {
-      badge.textContent = 'Sadhak 🙏';
-      badge.classList.add('badge-sadhak');
-    } else {
-      badge.textContent = 'Abhyas 📿';
-      badge.classList.add('badge-abhyas');
-    }
-  }
-
-  updateProgress() {
-    const completed = this.currentLineIndex;
-    const total = this.totalLines;
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-
-    if (this.els.progressBar) {
-      this.els.progressBar.style.width = `${pct}%`;
-    }
-
-    const curLine = this.lines[Math.min(this.currentLineIndex, this.totalLines - 1)];
-    if (curLine && this.els.progressDisplay) {
-      if (curLine.verseType === 'chaupai') {
-        this.els.progressDisplay.textContent = `Chaupai ${curLine.verseNum} / 40`;
-      } else if (curLine.verseType === 'doha-start') {
-        this.els.progressDisplay.textContent = `Doha ${curLine.verseNum} / 2`;
-      } else {
-        this.els.progressDisplay.textContent = `Closing Doha`;
-      }
-    }
-  }
-
-  updateStatsDisplay() {
-    if (this.els.chantCount) this.els.chantCount.textContent = this.chantCount;
-    if (this.els.streakCount) this.els.streakCount.textContent = `${this.streak} d`;
-    this.updateProgress();
-  }
-
-  updateTargetDisplay() {
-    if (this.els.targetSub) {
-      this.els.targetSub.textContent = `Goal: ${this.sankalpaTarget}x (${this.chantCount}/${this.sankalpaTarget})`;
-    }
-  }
-
-  calculateStreak() {
-    const today = new Date().toISOString().split('T')[0];
-    if (this.lastChantDate && this.lastChantDate !== today) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      if (this.lastChantDate !== yesterday) {
-        this.streak = 0;
-        safeStorage.set('hc_streak', '0');
-      }
-    }
-    if (this.els.streakCount) {
-      this.els.streakCount.textContent = `${this.streak} d`;
-    }
-  }
-
-  incrementStreak() {
-    const today = new Date().toISOString().split('T')[0];
-    if (this.lastChantDate !== today) {
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      this.streak = (this.lastChantDate === yesterday || !this.lastChantDate) ? (this.streak + 1) : 1;
-      this.lastChantDate = today;
-      safeStorage.set('hc_streak', String(this.streak));
-      safeStorage.set('hc_lastChantDate', today);
-    }
-    if (this.els.streakCount) {
-      this.els.streakCount.textContent = `${this.streak} d`;
-    }
-  }
-
-  // ==================== Resonant Temple Bell Chimes ====================
-
+  // Soft Divine Chime using Web Audio
   playDivineChime() {
     try {
       const ctx = getSharedAudioContext();
       if (!ctx) return;
-      const now = ctx.currentTime;
 
-      // Temple Bell 3-Harmonic Chime (C6 + E6 + G6 major triad)
-      const freqs = [523.25, 659.25, 783.99, 1046.5];
-      const gains = [0.06, 0.04, 0.03, 0.015];
-      freqs.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(528, ctx.currentTime); // Sacred Solfeggio frequency 528Hz (Love/Miracle)
+      osc.frequency.exponentialRampToValueAtTime(1056, ctx.currentTime + 0.15);
+
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+    } catch (e) {}
+  }
+
+  playSacredVictoryChime() {
+    try {
+      const ctx = getSharedAudioContext();
+      if (!ctx) return;
+
+      [528, 660, 792, 1056].forEach((freq, idx) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now);
-        gain.gain.setValueAtTime(gains[i], now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.12);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime + idx * 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.12 + 0.5);
+
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.9);
+
+        osc.start(ctx.currentTime + idx * 0.12);
+        osc.stop(ctx.currentTime + idx * 0.12 + 0.5);
       });
     } catch (e) {}
   }
 
-  playSoftNote() {
-    try {
-      const ctx = getSharedAudioContext();
-      if (!ctx) return;
-      const now = ctx.currentTime;
+  // ==================== UI & Preferences ====================
 
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now);
-      gain.gain.setValueAtTime(0.02, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.17);
-    } catch (e) {}
+  updateStatsDisplay() {
+    this.els.chantCountDisplay.textContent = this.chantCount;
+    this.els.statGoalTag.textContent = `/ ${this.sankalpaGoal}x`;
+
+    const progressPct = Math.min(100, Math.round((this.chantCount / this.sankalpaGoal) * 100));
+    this.els.sankalpaProgressFill.style.width = `${progressPct}%`;
+
+    if (this.accuracyScores.length > 0) {
+      this.els.accuracyDisplay.textContent = `${this.overallAccuracy}%`;
+      if (this.overallAccuracy >= 95) {
+        this.els.sacredTierBadge.textContent = 'Divya ★★★';
+      } else if (this.overallAccuracy >= 85) {
+        this.els.sacredTierBadge.textContent = 'Uttam ★★';
+      } else {
+        this.els.sacredTierBadge.textContent = 'Shreshtha ★';
+      }
+    } else {
+      this.els.accuracyDisplay.textContent = '--%';
+      this.els.sacredTierBadge.textContent = 'Sadhak';
+    }
+
+    this.els.paceDisplay.textContent = `${this.playbackSpeed}x`;
   }
 
-  // ==================== Session Control ====================
-
-  resetSession() {
-    this.stopListening();
-    this.stopAiRecitation();
-    this.currentLineIndex = 0;
-    this.currentWordIdx = 0;
-    this.totalAttemptedWords = 0;
-    this.totalMatchedWords = 0;
-    safeStorage.set('hc_currentLine', '0');
-    this.lineScores = {};
-
-    this.renderChalisa();
-    this.highlightCurrentLine(false);
-    this.els.accuracyScore.textContent = '100%';
-    this.updateAccuracyBadge(100);
-    this.els.transcriptText.textContent = 'Tap "AI Voice Sync" to chant or "Tap Sync" to start';
+  applyTheme() {
+    document.body.setAttribute('data-theme', this.theme);
   }
 
-  handleCompletion() {
-    this.stopListening();
-    this.stopAiRecitation();
+  applyFontSize() {
+    const sizes = ['1.1rem', '1.25rem', '1.45rem'];
+    const labels = ['Small', 'Medium', 'Large'];
+    const size = sizes[this.fontSizeLevel] || '1.25rem';
+    document.documentElement.style.setProperty('--verse-font-size', size);
+    this.els.fontSizeLabel.textContent = labels[this.fontSizeLevel] || 'Medium';
+  }
 
-    this.chantCount++;
-    safeStorage.set('hc_chantCount', String(this.chantCount));
-    if (this.els.chantCount) this.els.chantCount.textContent = this.chantCount;
-    this.updateTargetDisplay();
-
-    this.incrementStreak();
-
-    if (this.els.completionAccuracy) {
-      this.els.completionAccuracy.textContent = this.els.accuracyScore.textContent;
-    }
-    if (this.els.completionCount) {
-      this.els.completionCount.textContent = this.chantCount;
-    }
-    if (this.els.completionOverlay) {
-      this.els.completionOverlay.classList.add('open');
-    }
-
-    this.currentLineIndex = 0;
-    this.currentWordIdx = 0;
-    safeStorage.set('hc_currentLine', '0');
+  adjustFontSize(delta) {
+    this.fontSizeLevel = Math.max(0, Math.min(2, this.fontSizeLevel + delta));
+    safeStorage.set('chalisa_font_size', this.fontSizeLevel.toString());
+    this.applyFontSize();
   }
 }
 
-// 100% Reliable Bootloader for Mobile & Desktop
-function bootHanumanChalisa() {
-  if (window.app) return;
-  try {
-    window.app = new HanumanChalisaApp();
-  } catch (err) {
-    console.error('Boot error:', err);
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', bootHanumanChalisa);
-} else {
-  bootHanumanChalisa();
-}
+// Instantiate Engine on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  window.chalisaApp = new HanumanChalisaEngine();
+});

@@ -47,33 +47,38 @@ jobs:
 
       - name: Rename APK
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk HanumanChalisa-v1.1.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk HanumanChalisa-v1.2.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: HanumanChalisa-APK
-          path: HanumanChalisa-v1.1.apk
+          path: HanumanChalisa-v1.2.apk
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
-          tag_name: v1.1.0
-          name: "Shri Hanuman Chalisa Android App v1.1.0 (Sound Fixed)"
+          tag_name: v1.2.0
+          name: "Shri Hanuman Chalisa Android App v1.2.0 (Divine Audio & Redesigned Mobile UI)"
           body: |
-            ## 🕉️ Shri Hanuman Chalisa Android APK v1.1.0
+            ## 🕉️ Shri Hanuman Chalisa Android APK v1.2.0
             
-            ### 🔊 Sound & Voice Improvements in this Release:
-            - **Native Android Text-To-Speech:** Native Google TTS engine integration speaks authentic Hindi, Bengali, or English without WebView audio silence.
-            - **Android 11-15 Queries Permission:** Fixed Android package visibility restriction so Google TTS and Google Speech Recognition engines are discoverable by the app.
-            - **AudioContext Singleton:** Resolved hardware context limit (6 max) that previously caused audio dropouts on mobile.
-            - **Resonant Temple Bell Chime:** Replaced electronic beeps with sacred bronze temple bell harmonics.
+            ### 🌟 Major Sound & Mobile Redesign Improvements:
+            - **Soulful Devotional Audio Track:** Embedded authentic Hariharan Ji Shri Hanuman Chalisa recitation inside the APK assets for 100% offline playback on all Android phones without TTS dependency.
+            - **Word-by-Word Radiant Gold Karaoke Glow:** Calibrated timestamps for all 43 verses with real-time glowing word illumination as the audio recites.
+            - **Redesigned Mobile-First Sacred Temple UI:** Luxury Obsidian & Saffron Amber aesthetics, perfectly responsive across all mobile screens (320px - 480px) and desktops with zero overflow.
+            - **Segmented 3 Sacred Modes:**
+              - 🎵 **Divine Audio:** Listen & Learn with authentic recitation, scrubber slider, speed control (0.75x, 1.0x, 1.25x), and loop option.
+              - 🎙️ **AI Voice Sync:** Real-time microphone chanting tracker with live audio waveform bars and sacred accuracy scoring.
+              - 👆 **Tap Sync:** Meditative silent chanting counter with haptic vibration.
+            - **Sankalpa Mala Goals:** Track 1x, 7x, 11x, 21x, or 108x Maha Mala chanting.
+            - **Multilingual Support:** Complete Hindi, Bengali, and English transliterations and authentic verse-by-verse meanings.
 
             ### 📲 How to Install:
-            1. Download `HanumanChalisa-v1.1.apk` below directly onto your Android phone.
-            2. Tap the downloaded file to install (select "Update" or "Install").
-            3. Open and chant with full devotion! Works 100% offline without requiring any laptop.
-          files: HanumanChalisa-v1.1.apk
+            1. Download `HanumanChalisa-v1.2.apk` below directly to your Android smartphone.
+            2. Open the downloaded file to install/update the app.
+            3. Enjoy full offline devotional chanting on your mobile without needing any laptop!
+          files: HanumanChalisa-v1.2.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
