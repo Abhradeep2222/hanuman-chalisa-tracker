@@ -1,7 +1,7 @@
 # 🕉️ Shri Hanuman Chalisa | AI Devotional Kara-Sync & Mobile App
 
 [![Live App](https://img.shields.io/badge/Live%20App-Click%20To%20Open-FF7A00?style=for-the-badge&logo=googlechrome&logoColor=white)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
-[![Download Android APK v1.2](https://img.shields.io/badge/Download-Android%20APK%20v1.2-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.2.0/HanumanChalisa-v1.2.apk)
+[![Download Android APK v1.3](https://img.shields.io/badge/Download-Android%20APK%20v1.3-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.3.0/HanumanChalisa-v1.3.apk)
 [![Hosted on GitHub Pages](https://img.shields.io/badge/Hosted%20on-GitHub%20Pages-10B981?style=for-the-badge&logo=github)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
 [![Accuracy Tracker](https://img.shields.io/badge/Real--time-Voice%20AI%20Sync-F59E0B?style=for-the-badge)](https://abhradeep2222.github.io/hanuman-chalisa-tracker/)
 
@@ -13,7 +13,7 @@
 ---
 
 ### 📲 **Android APK Download (সরাসরি মোবাইল অ্যাপ ডাউনলোড):**
-👉 **[Click Here to Download HanumanChalisa-v1.2.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.2.0/HanumanChalisa-v1.2.apk)**
+👉 **[Click Here to Download HanumanChalisa-v1.3.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.3.0/HanumanChalisa-v1.3.apk)**
 
 👉 **[GitHub All Releases Page](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases)**
 
