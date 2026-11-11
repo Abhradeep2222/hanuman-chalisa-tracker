@@ -786,7 +786,7 @@ const CHALISA_DATA = {
         {
           hi: "होय सिद्धि साखी गौरीसा॥",
           en: "Hoye Siddhi Sakhi Gaurisa ||",
-          bn: "হোয় সিদ্ধি সাথী গৌরীসা॥"
+          bn: "হোয় সিদ্ধি সাখী গৌরীসা॥"
         }
       ]
     },
@@ -832,60 +832,105 @@ const CHALISA_DATA = {
 };
 
 /**
- * Phonetic transliterator: Converts Devanagari or Bengali to Latin approximation
+ * ==================== Cross-script phonetic normaliser ====================
+ * Reduces Devanagari, Bengali or romanised (Latin) text to a canonical
+ * consonant skeleton, so one word compares equal whatever script the speech
+ * recogniser returns it in:
+ *     "ज्ञान" / "জ্ঞান" / "Gyan"   -> "gn"
+ *     "बहुत"  / "বহুত"  / "Bahut"  -> "bht"
+ *     "जय"    / "জয়"    / "Jai"    -> "j"
+ *
+ * Rules (each one fixes a mismatch measured against the 417 aligned words):
+ *  - Input is NFD-normalised, so precomposed nukta letters (ड़ U+095C,
+ *    ড় U+09DC, য় U+09DF ...) become base letter + nukta. Without this the
+ *    recogniser's "पढ़" lost its ड़ entirely.
+ *  - Indic letters map straight to a canonical consonant; aspirates fold into
+ *    the plain consonant (भ->b, ध->d, च/छ->c). Latin digraph rules (bh, sh, kh,
+ *    gy ...) run ONLY on Latin runs. Running them on transliterated Indic text
+ *    merged real clusters: ब+ह ("bh") became "b", so बहुत != Bahut.
+ *  - ज्ञ/জ্ঞ and Latin gy/jn all become "gn". (The old gy->gn rule ran after
+ *    y->j and never fired; the old jn->gn rule also hit जनेऊ, जोजन ...)
+ *  - Anusvara and chandrabindu both become "n". Hindi recognisers use them
+ *    interchangeably (कहाँ / कहां) and romanisations mostly write the nasal as
+ *    "n" (Kahan, Nahin, Kandhe), so this is the most consistent choice.
+ *  - The skeleton keeps consonants only, repeats collapsed, and is never
+ *    padded back with vowels (that made "जय"->"jj" but "Jai"->"jai").
+ *    It can be a single letter; the matcher treats such words as weak.
  */
 const SCRIPT_TO_LATIN = {
-  'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ऋ':'ri','ए':'e','ऐ':'ai','ओ':'o','औ':'au',
+  // Devanagari vowels & matras (discarded by the skeleton, kept by scriptToPhonetic)
+  'अ':'a','आ':'a','इ':'i','ई':'i','उ':'u','ऊ':'u','ऋ':'ri','ए':'e','ऐ':'ai','ओ':'o','औ':'au','ऑ':'o','ॐ':'om',
+  'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','ृ':'ri','े':'e','ै':'ai','ो':'o','ौ':'au','ॉ':'o','ॅ':'e',
   'क':'k','ख':'k','ग':'g','घ':'g','ङ':'n',
-  'च':'ch','छ':'ch','ज':'j','झ':'j','ञ':'n',
+  'च':'c','छ':'c','ज':'j','झ':'j','ञ':'n',
   'ट':'t','ठ':'t','ड':'d','ढ':'d','ण':'n',
   'त':'t','थ':'t','द':'d','ध':'d','न':'n',
   'प':'p','फ':'p','ब':'b','भ':'b','म':'m',
-  'य':'j','र':'r','ल':'l','व':'b','श':'s','ष':'s','स':'s','ह':'h',
-  'ा':'a','ि':'i','ी':'i','ु':'u','ू':'u','ृ':'ri','े':'e','ै':'ai','ो':'o','ौ':'au','्':'',
-  'ं':'n','ः':'h','ँ':'n','़':'',
+  'य':'j','र':'r','ल':'l','ळ':'l','व':'b','श':'s','ष':'s','स':'s','ह':'h',
+  'ं':'n','ः':'h','ँ':'n','़':'','्':'',
   // Bengali
   'অ':'a','আ':'a','ই':'i','ঈ':'i','উ':'u','ঊ':'u','ঋ':'ri','এ':'e','ঐ':'ai','ও':'o','ঔ':'au',
+  'া':'a','ি':'i','ী':'i','ু':'u','ূ':'u','ৃ':'ri','ে':'e','ৈ':'ai','ো':'o','ৌ':'au','ৗ':'u',
   'ক':'k','খ':'k','গ':'g','ঘ':'g','ঙ':'n',
-  'চ':'ch','ছ':'ch','জ':'j','ঝ':'j','ঞ':'n',
+  'চ':'c','ছ':'c','জ':'j','ঝ':'j','ঞ':'n',
   'ট':'t','ঠ':'t','ড':'d','ঢ':'d','ণ':'n',
   'ত':'t','থ':'t','দ':'d','ধ':'d','ন':'n',
   'প':'p','ফ':'p','ব':'b','ভ':'b','ম':'m',
   'য':'j','র':'r','ল':'l','শ':'s','ষ':'s','স':'s','হ':'h',
-  'ড়':'r','ঢ়':'r','য়':'j','ৎ':'t','ং':'n','ঃ':'h','ঁ':'n',
-  'া':'a','ি':'i','ী':'i','ু':'u','ূ':'u','ৃ':'ri','ে':'e','ৈ':'ai','ো':'o','ৌ':'au','্':''
+  'ৎ':'t','ং':'n','ঃ':'h','ঁ':'n','়':'','্':''
 };
 
-function scriptToPhonetic(str) {
-  if (!str) return '';
-  let out = '';
-  for (let ch of str.toLowerCase()) {
-    out += SCRIPT_TO_LATIN[ch] !== undefined ? SCRIPT_TO_LATIN[ch] : ch;
-  }
-  return out.replace(/[^a-z0-9]/g, '');
+// Punctuation and separators become word boundaries (danda, double danda, |, hyphen ...)
+const PHONETIC_SEPARATORS = /[।॥|,.;:!?'"“”‘’()[\]{}\-–—_/\\]+/g;
+// ज्ञ (Devanagari) and জ্ঞ (Bengali) are pronounced "gy" / "gg", romanised "gy"
+const JNA_CONJUNCT = /ज्ञ|জ্ঞ/g;
+
+function canonicalLatin(run) {
+  return run
+    .replace(/gy/g, 'gn').replace(/jn/g, 'gn')          // gyan / jnana ~ ज्ञान
+    .replace(/x/g, 'ks').replace(/q/g, 'k').replace(/z/g, 'j').replace(/f/g, 'p')
+    .replace(/c(?!h)/g, 'k').replace(/ch+/g, 'c')          // lone c is k; ch/chh is च/छ
+    .replace(/sh/g, 's')
+    .replace(/([bpkgjdt])h/g, '$1')                        // bh ph kh gh jh dh th -> plain
+    .replace(/[vw]/g, 'b').replace(/y/g, 'j');
 }
 
 /**
- * Phonetic skeleton with Awadhi-to-Modern-Hindi mapping & sound normalization
- * Collapses v/b, sh/s, y/j, retroflexes, vowels and duplicate consonants
+ * Latin approximation of a word or phrase (vowels kept, separators removed).
+ */
+function scriptToPhonetic(str) {
+  if (!str) return '';
+  const s = String(str).normalize('NFD').toLowerCase()
+    .replace(PHONETIC_SEPARATORS, ' ')
+    .replace(JNA_CONJUNCT, 'gn');
+  let out = '';
+  let latin = '';
+  for (const ch of s) {
+    if (Object.prototype.hasOwnProperty.call(SCRIPT_TO_LATIN, ch)) {
+      if (latin) { out += canonicalLatin(latin); latin = ''; }
+      out += SCRIPT_TO_LATIN[ch];
+    } else if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+      latin += ch;
+    } else if (ch >= '̀' && ch <= 'ͯ') {
+      // combining accent from NFD of IAST text (ā, ś ...): ignore, keep the run going
+    } else if (latin) {
+      out += canonicalLatin(latin);
+      latin = '';
+    }
+  }
+  if (latin) out += canonicalLatin(latin);
+  return out;
+}
+
+/**
+ * Canonical consonant skeleton used for speech matching.
+ * Returns '' for punctuation-only tokens such as "|" or "॥".
  */
 function phoneticSkeleton(str) {
-  if (!str) return '';
-  let s = scriptToPhonetic(str);
-  s = s.replace(/[vw]/g, 'b')
-       .replace(/sh/g, 's')
-       .replace(/y/g, 'j')
-       .replace(/ph/g, 'p')
-       .replace(/bh/g, 'b')
-       .replace(/dh/g, 'd')
-       .replace(/th/g, 't')
-       .replace(/kh/g, 'k')
-       .replace(/gh/g, 'g')
-       .replace(/jn/g, 'gn')
-       .replace(/gy/g, 'gn')
-       .replace(/ch+/g, 'ch');
-  const noVowels = s.replace(/[aeiou]/g, '').replace(/(.)\1+/g, '$1');
-  return noVowels.length >= 2 ? noVowels : s;
+  const p = scriptToPhonetic(str);
+  if (!p) return '';
+  const consonants = p.replace(/[aeiou]/g, '').replace(/(.)\1+/g, '$1');
+  return consonants || p.replace(/(.)\1+/g, '$1'); // vowel-only word such as "ऐ"
 }
 
 function getFlatLines() {

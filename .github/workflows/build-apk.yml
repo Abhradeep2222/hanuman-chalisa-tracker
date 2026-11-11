@@ -1,9 +1,16 @@
 name: Build Android APK
 
+# Every push and pull request is built and tested; the APK is kept as a
+# workflow artifact. A release is published ONLY when a version tag is pushed
+# (git tag v1.4.0 && git push origin v1.4.0), and the tag must match the
+# "version" in package.json, which also sets the APK's versionCode/versionName.
 on:
   push:
     branches:
       - master
+    tags:
+      - 'v*'
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -23,7 +30,22 @@ jobs:
           cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci || npm install
+        run: npm ci
+
+      - name: Run Web Tests (speech matcher + app wiring)
+        run: npm test
+
+      - name: Read App Version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Check Tag Matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          if [ "$GITHUB_REF_NAME" != "v${{ steps.version.outputs.version }}" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
 
       - name: Build Web Assets
         run: |
@@ -40,41 +62,75 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      - name: Run Native Unit Tests (continuous recogniser + beep guard)
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew testDebugUnitTest --no-daemon
 
-      - name: Rename APK
+      # Android installs an update over the existing app only if both are signed
+      # with the same key, so releases use one fixed key kept in repository secrets.
+      - name: Restore Release Signing Key
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk HanumanChalisa-v1.3.apk
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.p12"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.p12" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set: building a debug-signed APK (fine for testing, not for releases)."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refuse To Release A Debug-Signed APK
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.signed != 'true'
+        run: |
+          echo "::error::Releases must be signed with the release key, or users cannot install later updates over them. Add the ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_ALIAS / ANDROID_KEY_PASSWORD secrets."
+          exit 1
+
+      - name: Build APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          cd android
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk ../HanumanChalisa.apk
+          else
+            ./gradlew assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk ../HanumanChalisa.apk
+          fi
+
+      - name: Verify APK (signature, version, bundled web app)
+        run: |
+          TOOLS="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)"
+          "$TOOLS/apksigner" verify --print-certs HanumanChalisa.apk | tee apk-signature.txt
+          "$TOOLS/aapt" dump badging HanumanChalisa.apk | head -1 | tee -a apk-signature.txt
+          unzip -l HanumanChalisa.apk | grep -E "assets/public/js/(app|speech-matcher)\.js"
+          cp HanumanChalisa.apk "HanumanChalisa-v${{ steps.version.outputs.version }}.apk"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: HanumanChalisa-APK
-          path: HanumanChalisa-v1.3.apk
+          name: HanumanChalisa-v${{ steps.version.outputs.version }}-APK
+          path: |
+            HanumanChalisa-v${{ steps.version.outputs.version }}.apk
+            apk-signature.txt
 
-      - name: Release APK
+      # "HanumanChalisa.apk" keeps the same name in every release, so
+      # .../releases/latest/download/HanumanChalisa.apk always serves the newest one.
+      - name: Publish Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/heads/master')
         with:
-          tag_name: v1.3.0
-          name: "Shri Hanuman Chalisa Android App v1.3.0 (Multilingual AI Voice Sync & Acoustic VAD Fixed)"
-          body: |
-            ## 🕉️ Shri Hanuman Chalisa Android APK v1.3.0
-            
-            ### 🌟 Major AI Voice Sync & Multilingual Fixes:
-            - **Multilingual Cross-Script Speech Recognition:** Fixed critical bug where Bengali and English chanting failed to match Devanagari tokens. Now utilizes multi-script `phoneticSkeleton` normalization for Bengali (`বাংলা`), Hindi (`हिन्दी`), and English transliteration.
-            - **Capacitor Native Android Speech Bridge:** Wired `@capacitor-community/speech-recognition` into Android APK with native runtime permission checks.
-            - **Acoustic Voice Activity Detection (VAD):** Integrated real-time RMS voice cadence tracker via Web Audio API, ensuring live microphone chanting pulses and advances word-by-word even in offline environments.
-            - **Soulful Devotional Audio Track:** Embedded authentic Hariharan Ji Shri Hanuman Chalisa recitation with calibrated word-by-word karaoke synchronization.
-            - **Redesigned Mobile-First Sacred Temple UI:** 100% responsive on all mobile screens with zero overflow.
-
-            ### 📲 How to Install:
-            1. Download `HanumanChalisa-v1.3.apk` below directly to your Android smartphone.
-            2. Open the downloaded file to install/update the app.
-            3. Enjoy full offline devotional chanting on your mobile without needing any laptop!
-          files: HanumanChalisa-v1.3.apk
+          name: "Shri Hanuman Chalisa v${{ steps.version.outputs.version }}"
+          body_path: RELEASE_NOTES.md
+          make_latest: true
+          files: |
+            HanumanChalisa-v${{ steps.version.outputs.version }}.apk
+            HanumanChalisa.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

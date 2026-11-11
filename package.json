@@ -1,10 +1,11 @@
 {
   "name": "hanuman-chalisa-chant-tracker",
-  "version": "1.0.0",
+  "version": "1.4.0",
   "description": "Hanuman Chalisa Chanting Tracker with Speech Recognition, Real-time Sync & Accuracy Scoring",
   "scripts": {
     "start": "npx serve .",
-    "dev": "npx serve . -l 3000"
+    "dev": "npx serve . -l 3000",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "keywords": [
     "hanuman-chalisa",
@@ -14,7 +15,6 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor-community/text-to-speech": "^8.0.2",
     "@capacitor/core": "^8.6.0"
   },

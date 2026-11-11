@@ -1,11 +1,13 @@
-// Shri Hanuman Chalisa - Offline Service Worker
-const CACHE_NAME = 'hanuman-chalisa-v1';
+// Shri Hanuman Chalisa - Offline Service Worker (website only; not registered in the APK)
+// Bump CACHE_NAME whenever a cached file changes so old caches are dropped on activate.
+const CACHE_NAME = 'hanuman-chalisa-v5';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './js/chalisa-meanings.js',
   './js/chalisa-data.js',
+  './js/speech-matcher.js',
   './js/app.js',
   './manifest.json'
 ];
@@ -31,25 +33,31 @@ self.addEventListener('activate', (e) => {
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
+// Stale-while-revalidate for same-origin files. Range requests (audio seeking)
+// and cross-origin requests (Google Fonts) go straight to the network.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET' || req.headers.has('range')) return;
+  if (new URL(req.url).origin !== self.location.origin) return;
+
+  // ignoreSearch: the page asks for style.css?v=5.0 but the cache key is ./style.css
+  const cached = caches.match(req, { ignoreSearch: true });
+  const network = fetch(req).then((res) => {
+    if (res && res.status === 200 && res.type === 'basic') {
+      const copy = res.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+    }
+    return res;
+  });
+
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached and refresh in background
-        fetch(e.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(e.request, networkResponse));
-          }
-        }).catch(() => {});
-        return cachedResponse;
-      }
-      return fetch(e.request);
-    }).catch(() => caches.match('./index.html'))
+    cached.then((hit) => hit || network).catch(() =>
+      req.mode === 'navigate' ? caches.match('./index.html') : Response.error()
+    )
   );
+  e.waitUntil(network.then(() => {}, () => {}));
 });

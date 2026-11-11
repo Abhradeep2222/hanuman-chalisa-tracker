@@ -11,3 +11,8 @@ local.properties
 .DS_Store
 *.apk
 *.aab
+
+# Signing keys never belong in the repository
+*.p12
+*.jks
+*.keystore

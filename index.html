@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Shri Hanuman Chalisa | Divine Audio, AI Voice & Chanting Tracker</title>
     <meta name="description" content="Authentic Shri Hanuman Chalisa with divine devotional audio, word-by-word karaoke synchronization, real-time AI speech recognition, pronunciation accuracy scoring, and multilingual meanings.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23F59E0B'><circle cx='12' cy='12' r='10'/></svg>">
@@ -17,15 +17,17 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&family=Noto+Serif+Devanagari:wght@500;600;700;800&family=Noto+Serif+Bengali:wght@500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=4.0">
+    <link rel="stylesheet" href="style.css?v=5.0">
 </head>
 <body data-theme="dark">
 
     <!-- Background Temple Ambience Glow -->
     <div class="temple-ambient-glow" aria-hidden="true"></div>
 
-    <!-- Hidden Native Audio Engine for Soulful Devotional Chanting -->
-    <audio id="chalisaAudio" preload="auto" playsinline>
+    <!-- Hidden Native Audio Engine for Soulful Devotional Chanting.
+         preload="metadata": the 13.9 MB track downloads only when played,
+         not on every page visit (Voice and Tap users never need it). -->
+    <audio id="chalisaAudio" preload="metadata" playsinline>
         <source src="audio/hanuman-chalisa.mp3" type="audio/mpeg">
         <source src="https://archive.org/download/hanuman-chalisa-i-gulshan-kumar-i-hariharan-full-hd-video-i-shree-hanuman-chalisa/%E0%A4%B9%E0%A4%A8%E0%A4%AE%E0%A4%A8%20%E0%A4%9A%E0%A4%B2%E0%A4%B8%20Hanuman%20Chalisa%20I%20GULSHAN%20KUMAR%20I%20HARIHARAN,%20Full%20HD%20Video%20I%20Shree%20Hanuman%20Chalisa.mp3" type="audio/mpeg">
     </audio>
@@ -218,15 +220,15 @@
             </div>
 
             <!-- Stat 2: Chanting Accuracy -->
-            <div class="stat-card">
+            <div class="stat-card" title="Share of chanted words the speech engine recognised, over the lines finished in AI Voice Sync">
                 <div class="stat-card-header">
                     <span class="stat-icon">🌟</span>
-                    <span class="stat-title">Pronunciation</span>
+                    <span class="stat-title">Accuracy</span>
                 </div>
                 <div class="stat-main-val">
                     <span id="accuracyDisplay">--%</span>
                 </div>
-                <span class="sacred-tier-badge" id="sacredTierBadge">Divya ★</span>
+                <span class="sacred-tier-badge" id="sacredTierBadge">Chant to score</span>
             </div>
 
             <!-- Stat 3: Current Verse -->
@@ -344,7 +346,7 @@
                 <div class="setting-item">
                     <div class="setting-info">
                         <span class="setting-name">Keep Screen Awake (WakeLock)</span>
-                        <span class="setting-desc">Prevent phone display from sleeping</span>
+                        <span class="setting-desc" id="wakeLockDesc">Prevent phone display from sleeping while chanting</span>
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" id="wakeLockToggle" checked>
@@ -366,13 +368,26 @@
     <!-- Scripts in strict dependency order -->
     <script src="js/chalisa-meanings.js"></script>
     <script src="js/chalisa-data.js"></script>
+    <script src="js/speech-matcher.js"></script>
     <script src="js/app.js"></script>
     <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('sw.js').catch(() => {});
+      // Service worker only for the website. The APK already ships every file,
+      // and a worker there would serve the previous version's cached files on
+      // the first launch after each app update.
+      (function () {
+        if (!('serviceWorker' in navigator)) return;
+        var cap = window.Capacitor;
+        var isNative = !!cap && (typeof cap.isNativePlatform === 'function' ? cap.isNativePlatform() : (cap.platform && cap.platform !== 'web'));
+        if (isNative) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) { r.unregister(); });
+          }).catch(function () {});
+          return;
+        }
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('sw.js').catch(function () {});
         });
-      }
+      })();
     </script>
 </body>
 </html>

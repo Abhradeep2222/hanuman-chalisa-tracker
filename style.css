@@ -772,6 +772,10 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
+[data-theme="light"] .sankalpa-quick-bar {
+  background: rgba(255, 255, 255, 0.85);
+}
+
 .sankalpa-label {
   font-size: 0.74rem;
   font-weight: 600;
@@ -864,6 +868,10 @@ body {
   color: var(--sacred-green);
 }
 
+.verse-acc-pill.low {
+  color: #F59E0B;
+}
+
 .verse-content {
   display: flex;
   flex-direction: column;
@@ -890,8 +898,10 @@ body[data-lang="en"] .verse-line {
   font-family: var(--font-serif);
 }
 
+/* var(--text-pure), not #FFF: in the light theme #FFF made the active line
+   invisible on the cream card */
 .verse-line.active-line {
-  color: #FFF;
+  color: var(--text-pure);
 }
 
 /* Brilliant Radiant Gold Karaoke Word Token */
@@ -915,6 +925,29 @@ body[data-lang="en"] .verse-line {
 
 .word-token.passed {
   color: var(--gold-bright);
+}
+
+/* AI Voice Sync: recognised / not recognised words */
+.word-token.matched {
+  color: var(--sacred-green);
+  text-decoration: underline;
+  text-decoration-color: rgba(16, 185, 129, 0.55);
+  text-underline-offset: 6px;
+}
+
+.word-token.missed {
+  opacity: 0.75;
+  text-decoration: underline dotted;
+  text-decoration-color: rgba(239, 68, 68, 0.75);
+  text-underline-offset: 6px;
+}
+
+[data-theme="light"] .word-token.matched {
+  color: #047857;
+}
+
+[data-theme="light"] .word-token.passed {
+  color: #B45309;
 }
 
 /* Meaning Drawer / Box */
@@ -1079,6 +1112,16 @@ body[data-lang="en"] .verse-line {
   padding: 12px 18px calc(20px + env(safe-area-inset-bottom));
   box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.6);
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  /* In landscape the sheet is taller than the screen: scroll inside it
+     instead of pushing its title and close button off the top. */
+  max-height: calc(100vh - 12px);
+  max-height: calc(100dvh - 12px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+[data-theme="light"] .bottom-sheet-card {
+  background: rgba(255, 250, 242, 0.98);
 }
 
 @keyframes slideUp {
@@ -1249,6 +1292,11 @@ body[data-lang="en"] .verse-line {
   transform: translateX(20px);
 }
 
+.toggle-switch input:disabled + .toggle-slider {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .danger-pill-btn {
   width: 100%;
   display: flex;
@@ -1265,7 +1313,134 @@ body[data-lang="en"] .verse-line {
   cursor: pointer;
 }
 
+/* ==================== Toast (replaces blocking alert()) ==================== */
+
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  transform: translate(-50%, 16px);
+  width: max-content;
+  max-width: min(92vw, 520px);
+  padding: 10px 16px;
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-gold);
+  color: var(--text-pure);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  z-index: 150;
+}
+
+.app-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* ==================== 10. Mobile Responsiveness Tweaks ==================== */
+
+/* Phones: the title, meaning toggle, script switch and two icon buttons need
+   ~460px in one row, so the title was squeezed to 0-88px ("Sh..."). Below
+   560px the header becomes two rows: title + icons, then script + meaning. */
+@media (max-width: 560px) {
+  .header-inner {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .header-actions {
+    display: contents;
+  }
+
+  .brand-wrapper {
+    flex: 1 1 0;
+    order: 0;
+  }
+
+  #themeToggleBtn { order: 1; }
+  #openSettingsBtn { order: 2; }
+
+  .header-inner::after {
+    content: '';
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .lang-switch-group { order: 4; }
+  #toggleMeaningBtn { order: 5; margin-left: auto; }
+
+  /* keep the two-row header compact: reading space matters more */
+  .temple-header { padding: 6px 10px; }
+  .sacred-yantra-icon { width: 32px; height: 32px; min-width: 32px; }
+  .temple-header .icon-circle-btn { width: 36px; height: 36px; }
+  .temple-header .lang-btn { min-height: 30px; padding: 4px 12px; }
+  .temple-header .header-pill-btn { min-height: 32px; }
+  .brand-title { font-size: clamp(0.85rem, 4vw, 1.1rem); letter-spacing: 0.2px; }
+}
+
+@media (max-width: 400px) {
+  .brand-sub {
+    display: none;
+  }
+}
+
+@media (max-width: 340px) {
+  .brand-title {
+    font-size: 0.8rem;
+  }
+}
+
+/* Goal pills wrap under their label instead of hiding 21x / 108x in a
+   sideways scroll nobody discovers. */
+@media (max-width: 440px) {
+  .sankalpa-quick-bar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .sankalpa-options {
+    flex: 1 1 100%;
+  }
+
+  .goal-pill {
+    flex: 1 1 0;
+  }
+}
+
+/* Touch screens: bring the small pill controls up to a comfortable size */
+@media (pointer: coarse) {
+  .lang-btn,
+  .speed-btn,
+  .pill-option {
+    min-height: 34px;
+    min-width: 40px;
+  }
+
+  .goal-pill,
+  .tool-pill-btn,
+  .header-pill-btn,
+  .hud-quick-jump-btn,
+  .tap-reset-btn {
+    min-height: 36px;
+  }
+
+  .icon-circle-btn,
+  .close-sheet-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .nav-step-btn {
+    width: 44px;
+    height: 44px;
+  }
+}
 
 @media (max-width: 480px) {
   .temple-header {
@@ -1284,8 +1459,9 @@ body[data-lang="en"] .verse-line {
   }
 
   .nav-step-btn {
-    width: 36px;
-    height: 36px;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
   }
 
   .verse-card {

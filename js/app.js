@@ -1,15 +1,20 @@
 /**
- * Shri Hanuman Chalisa - Core Application Engine v4.1 (Multilingual & Capacitor Native Fixed)
+ * Shri Hanuman Chalisa - Core Application Engine v5.0
  * Features:
- *  - Soulful Devotional Audio playback with calibrated 43-verse karaoke synchronization
- *  - Cross-Script Phonetic AI Speech Recognition (Hindi, Bengali, English transliteration)
- *  - Capacitor Native Android SpeechRecognition Bridge + Web Speech API + Acoustic VAD Fallback
- *  - Interactive Tap Sync mode with sacred chime and haptic feedback
- *  - Multilingual support (Hindi, Bengali, English text & meanings)
- *  - Full mobile responsiveness & offline PWA/Capacitor APK support
+ *  - Devotional audio playback with 43-verse karaoke synchronisation
+ *  - AI Voice Sync: cross-script speech alignment (js/speech-matcher.js) fed by
+ *    the Capacitor native Android recogniser or the Web Speech API, with an
+ *    honest "rhythm mode" fallback when no recogniser exists
+ *  - Tap Sync mode with sacred chime and haptic feedback
+ *  - Hindi, Bengali and English text & meanings
+ *  - Mobile-first, offline PWA / Capacitor APK
+ *
+ * Load order: chalisa-meanings.js, chalisa-data.js, speech-matcher.js, app.js
  */
 
-// Calibrated Timestamps (in seconds) for Hariharan Ji's Shri Hanuman Chalisa (9m 41s)
+// Verse start/end times (seconds) in audio/hanuman-chalisa.mp3 (9m 41s).
+// NOTE: the 40 chaupais are spaced a uniform 11.0 s apart; re-time against the
+// track if the karaoke drifts from the singer.
 const VERSE_TIMESTAMPS = [
   // Opening Dohas
   { verseIndex: 0, start: 42.5, end: 74.0 },   // Doha 1
@@ -59,7 +64,10 @@ const VERSE_TIMESTAMPS = [
   { verseIndex: 42, start: 544.5, end: 574.0 }  // Ending Doha
 ];
 
-// Safe Storage Helper
+const PLAYBACK_SPEEDS = [0.75, 1.0, 1.25];
+const LANG_NAMES = { 'hi-IN': 'हिन्दी (hi-IN)', 'bn-IN': 'বাংলা (bn-IN)' };
+
+// Safe Storage Helper (private mode / blocked storage must not break the app)
 const safeStorage = {
   get(key, fallback = null) {
     try {
@@ -76,6 +84,16 @@ const safeStorage = {
   }
 };
 
+function storedChoice(key, allowed, fallback) {
+  const v = safeStorage.get(key, fallback);
+  return allowed.indexOf(v) >= 0 ? v : fallback;
+}
+
+function storedInt(key, min, max, fallback) {
+  const v = parseInt(safeStorage.get(key, String(fallback)), 10);
+  return Number.isFinite(v) && v >= min && v <= max ? v : fallback;
+}
+
 // Singleton Web Audio Context
 let sharedAudioCtx = null;
 function getSharedAudioContext() {
@@ -91,54 +109,106 @@ function getSharedAudioContext() {
   return sharedAudioCtx;
 }
 
+function isNativeApp() {
+  const cap = window.Capacitor;
+  if (!cap) return false;
+  if (typeof cap.isNativePlatform === 'function') return cap.isNativePlatform();
+  return !!cap.platform && cap.platform !== 'web';
+}
+
+// The app's own Capacitor plugin (android/app/src/main/java/.../speech/ChantRecognizerPlugin.java),
+// exposed by the Capacitor bridge.
+function nativeSpeechPlugin() {
+  if (!isNativeApp()) return null;
+  const plugins = window.Capacitor.Plugins;
+  return plugins && plugins.ChantRecognizer ? plugins.ChantRecognizer : null;
+}
+
+const MSG_MIC_PERMISSION = 'Microphone permission is off. Allow it in Android Settings → Apps → Shri Hanuman Chalisa → Permissions, then tap Start again.';
+
+function settle(fn) {
+  return Promise.resolve().then(fn).catch(() => {});
+}
+
 // Master App Engine
 class HanumanChalisaEngine {
   constructor() {
-    // State
+    // Preferences (validated: a corrupt value must not break playback or the stats)
     this.currentMode = 'audio'; // 'audio' | 'voice' | 'tap'
-    this.scriptLang = safeStorage.get('chalisa_script_lang', 'hi');
-    this.meaningLang = safeStorage.get('chalisa_meaning_lang', 'hi');
+    this.scriptLang = storedChoice('chalisa_script_lang', ['hi', 'bn', 'en'], 'hi');
+    this.meaningLang = storedChoice('chalisa_meaning_lang', ['hi', 'bn', 'en'], 'hi');
     this.showMeaning = safeStorage.get('chalisa_show_meaning', 'true') === 'true';
-    this.theme = safeStorage.get('chalisa_theme', 'dark');
-    this.fontSizeLevel = parseInt(safeStorage.get('chalisa_font_size', '1'), 10);
+    this.theme = storedChoice('chalisa_theme', ['dark', 'light'], 'dark');
+    this.fontSizeLevel = storedInt('chalisa_font_size', 0, 2, 1);
     this.autoScroll = safeStorage.get('chalisa_autoscroll', 'true') === 'true';
-    this.playbackSpeed = parseFloat(safeStorage.get('chalisa_speed', '1.0'));
-    this.sankalpaGoal = parseInt(safeStorage.get('chalisa_sankalpa_goal', '1'), 10);
-    this.chantCount = parseInt(safeStorage.get('chalisa_chant_count', '0'), 10);
+    const speed = parseFloat(safeStorage.get('chalisa_speed', '1.0'));
+    this.playbackSpeed = PLAYBACK_SPEEDS.indexOf(speed) >= 0 ? speed : 1.0;
+    this.sankalpaGoal = storedInt('chalisa_sankalpa_goal', 1, 1008, 1);
+    this.chantCount = storedInt('chalisa_chant_count', 0, 1e7, 0);
     this.isLooping = safeStorage.get('chalisa_loop', 'false') === 'true';
+    this.keepAwake = safeStorage.get('chalisa_wakelock', 'true') === 'true';
 
-    // Tracking
+    // Position (wordIndex counts words, not punctuation tokens like "|")
     this.currentVerseIndex = 0;
     this.currentLineIndex = 0;
     this.currentWordIndex = 0;
     this.totalVerses = CHALISA_DATA.verses.length;
 
-    // Accuracy
-    this.accuracyScores = [];
-    this.overallAccuracy = 0;
+    // Accuracy = words recognised / words expected, over the lines finished
+    this.accuracy = { matched: 0, total: 0 };
+    this.verseScores = new Map(); // verseIndex -> Map(lineIndex -> {matched, total})
 
     // Audio Player
     this.audio = document.getElementById('chalisaAudio');
     this.isAudioPlaying = false;
     this.audioDuration = 581;
+    this.audioFailed = false;
 
-    // Speech Recognition & Microphone
+    // Speech alignment
+    this.tracker = new SpeechMatcher.RecitationTracker(CHALISA_DATA.verses);
+    this.feed = new SpeechMatcher.TranscriptFeed();
+    this.lineModel = new Map(this.tracker.lines.map(L => [`${L.verseIndex}-${L.lineIndex}`, L]));
+
+    // Voice session
     this.isVoiceListening = false;
+    this.voiceSession = 0;
+    this.voice = this.freshVoiceState();
+    this.voiceTiming = { webRestartDelay: 250 };
     this.recognition = null;
     this.micStream = null;
+    this.micSource = null;
     this.micAnalyser = null;
     this.animFrameId = null;
-    this.lastVoicePulseTime = 0;
-    this.voicePulseCount = 0;
+    this.vad = { floor: 0.01, active: false, lastOnset: 0 };
 
-    // DOM Elements
+    this.wakeLock = null;
+    this.wakeLockBusy = false;
+    this.toastEl = null;
+    this.toastTimer = null;
+
     this.bindDomElements();
     this.applyTheme();
     this.applyFontSize();
     this.renderVerses();
+    this.syncControls();
     this.setupEventListeners();
     this.updateStatsDisplay();
     this.switchMode('audio');
+  }
+
+  freshVoiceState() {
+    return {
+      engine: null,        // 'native' | 'web' | 'rhythm'
+      starting: false,
+      plugin: null,
+      lang: null,
+      beepMuted: false,    // native: system listening beep muted for the session
+      restartTimer: null,  // web: pending restart
+      errorStreak: 0,
+      webRun: 0,
+      webKeys: [],
+      fatal: false
+    };
   }
 
   bindDomElements() {
@@ -206,6 +276,7 @@ class HanumanChalisaEngine {
       meaningLangBtns: document.querySelectorAll('#meaningLangGroup .pill-option'),
       autoScrollToggle: document.getElementById('autoScrollToggle'),
       wakeLockToggle: document.getElementById('wakeLockToggle'),
+      wakeLockDesc: document.getElementById('wakeLockDesc'),
       resetAllDataBtn: document.getElementById('resetAllDataBtn')
     };
   }
@@ -218,7 +289,7 @@ class HanumanChalisaEngine {
     CHALISA_DATA.verses.forEach((verse, vIdx) => {
       const verseLabel = verse.label[this.scriptLang] || verse.label.en;
       const verseTitle = `${verseLabel} • ${verse.num} / ${verse.totalOfCategory}`;
-      
+
       const meaningObj = CHALISA_MEANINGS && CHALISA_MEANINGS[vIdx] ? CHALISA_MEANINGS[vIdx] : null;
       const meaningText = meaningObj ? (meaningObj[this.meaningLang] || meaningObj.en || '') : '';
 
@@ -234,7 +305,7 @@ class HanumanChalisaEngine {
       verse.lines.forEach((line, lIdx) => {
         const text = line[this.scriptLang] || line.hi || line.en;
         const words = text.split(/\s+/).filter(w => w.trim().length > 0);
-        
+
         html += `<div class="verse-line" id="line-${vIdx}-${lIdx}" data-verse="${vIdx}" data-line="${lIdx}">`;
         words.forEach((word, wIdx) => {
           html += `<span class="word-token" id="word-${vIdx}-${lIdx}-${wIdx}" data-word="${word}">${word}</span> `;
@@ -254,6 +325,24 @@ class HanumanChalisaEngine {
     });
 
     this.els.versesContainer.innerHTML = html;
+    this.refreshVersePills();
+  }
+
+  /** Reflect stored preferences in the controls (the HTML hard-codes defaults). */
+  syncControls() {
+    this.els.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === this.scriptLang));
+    this.els.meaningLangBtns.forEach(b => b.classList.toggle('active', b.dataset.mlang === this.meaningLang));
+    this.els.toggleMeaningBtn.classList.toggle('active', this.showMeaning);
+    this.els.goalPills.forEach(p => p.classList.toggle('active', parseInt(p.dataset.goal, 10) === this.sankalpaGoal));
+    this.els.loopAudioBtn.classList.toggle('active', this.isLooping);
+    this.els.loopLabel.textContent = this.isLooping ? 'Loop: ON' : 'Loop: 1x';
+    this.els.autoScrollToggle.checked = this.autoScroll;
+    this.els.wakeLockToggle.checked = this.keepAwake;
+    if (!('wakeLock' in navigator)) {
+      this.els.wakeLockToggle.disabled = true;
+      if (this.els.wakeLockDesc) this.els.wakeLockDesc.textContent = 'Not supported by this browser / WebView';
+    }
+    this.setPlaybackSpeed(this.playbackSpeed);
   }
 
   setupEventListeners() {
@@ -274,7 +363,7 @@ class HanumanChalisaEngine {
     this.els.resetAudioBtn.addEventListener('click', () => {
       this.audio.currentTime = 0;
       this.jumpToVerse(0);
-      if (this.isAudioPlaying) this.audio.play();
+      if (this.isAudioPlaying) this.audio.play().catch(() => {});
     });
 
     this.els.loopAudioBtn.addEventListener('click', () => {
@@ -286,7 +375,7 @@ class HanumanChalisaEngine {
 
     this.els.speedBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const speed = parseFloat(e.target.dataset.speed);
+        const speed = parseFloat(e.currentTarget.dataset.speed);
         this.setPlaybackSpeed(speed);
       });
     });
@@ -295,12 +384,28 @@ class HanumanChalisaEngine {
     this.audio.addEventListener('ended', () => this.handleAudioEnded());
     this.audio.addEventListener('play', () => this.setAudioPlayingState(true));
     this.audio.addEventListener('pause', () => this.setAudioPlayingState(false));
-
-    this.audio.addEventListener('error', () => {
-      console.warn('Local audio fallback to CDN...');
-      this.audio.src = 'https://archive.org/download/hanuman-chalisa-i-gulshan-kumar-i-hariharan-full-hd-video-i-shree-hanuman-chalisa/%E0%A4%B9%E0%A4%A8%E0%A4%AE%E0%A4%A8%20%E0%A4%9A%E0%A4%B2%E0%A4%B8%20Hanuman%20Chalisa%20I%20GULSHAN%20KUMAR%20I%20HARIHARAN,%20Full%20HD%20Video%20I%20Shree%20Hanuman%20Chalisa.mp3';
-      this.audio.load();
+    this.audio.addEventListener('loadedmetadata', () => {
+      const d = this.audio.duration;
+      if (Number.isFinite(d) && d > 0) {
+        this.audioDuration = d;
+        this.els.audioProgressSlider.max = String(d);
+        this.els.audioTotalDuration.textContent = this.formatSeconds(d);
+      }
     });
+    this.audio.addEventListener('canplay', () => { this.audioFailed = false; });
+
+    // The <source> list already falls back from the bundled file to the CDN.
+    // Errors on the last source (all failed) or on the element itself are
+    // reported once; the old handler re-set src on every error and looped.
+    const onAudioUnavailable = () => {
+      if (this.audioFailed) return;
+      this.audioFailed = true;
+      this.setAudioPlayingState(false);
+      this.showToast('The recitation audio could not be loaded. Check your internet connection and tap Play to retry.');
+    };
+    this.audio.addEventListener('error', onAudioUnavailable);
+    const sources = this.audio.querySelectorAll('source');
+    if (sources.length) sources[sources.length - 1].addEventListener('error', onAudioUnavailable);
 
     this.els.toggleVoiceBtn.addEventListener('click', () => this.toggleVoiceListening());
     this.els.tapTouchSurface.addEventListener('click', () => this.handleTapAdvance());
@@ -335,13 +440,16 @@ class HanumanChalisaEngine {
 
     this.els.langBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const lang = e.target.dataset.lang;
-        this.els.langBtns.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
+        const lang = e.currentTarget.dataset.lang;
+        const previousRecognitionLang = this.getRecognitionLang();
+        this.els.langBtns.forEach(b => b.classList.toggle('active', b === e.currentTarget));
         this.scriptLang = lang;
         safeStorage.set('chalisa_script_lang', lang);
         this.renderVerses();
         this.highlightCurrentVerseAndWord();
+        if (this.isVoiceListening && this.getRecognitionLang() !== previousRecognitionLang) {
+          this.restartVoiceListening();
+        }
       });
     });
 
@@ -353,16 +461,19 @@ class HanumanChalisaEngine {
 
     this.els.openSettingsBtn.addEventListener('click', () => {
       this.els.settingsModal.classList.add('open');
+      this.els.settingsModal.setAttribute('aria-hidden', 'false');
     });
 
-    this.els.closeSettingsBtn.addEventListener('click', () => {
+    const closeSettings = () => {
       this.els.settingsModal.classList.remove('open');
-    });
-
+      this.els.settingsModal.setAttribute('aria-hidden', 'true');
+    };
+    this.els.closeSettingsBtn.addEventListener('click', closeSettings);
     this.els.settingsModal.addEventListener('click', (e) => {
-      if (e.target === this.els.settingsModal) {
-        this.els.settingsModal.classList.remove('open');
-      }
+      if (e.target === this.els.settingsModal) closeSettings();
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeSettings();
     });
 
     this.els.fontDecrBtn.addEventListener('click', () => this.adjustFontSize(-1));
@@ -370,12 +481,12 @@ class HanumanChalisaEngine {
 
     this.els.meaningLangBtns.forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const mlang = e.target.dataset.mlang;
-        this.els.meaningLangBtns.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
+        const mlang = e.currentTarget.dataset.mlang;
+        this.els.meaningLangBtns.forEach(b => b.classList.toggle('active', b === e.currentTarget));
         this.meaningLang = mlang;
         safeStorage.set('chalisa_meaning_lang', mlang);
         this.renderVerses();
+        this.highlightCurrentVerseAndWord();
       });
     });
 
@@ -384,22 +495,29 @@ class HanumanChalisaEngine {
       safeStorage.set('chalisa_autoscroll', this.autoScroll.toString());
     });
 
+    this.els.wakeLockToggle.addEventListener('change', (e) => {
+      this.keepAwake = e.target.checked;
+      safeStorage.set('chalisa_wakelock', this.keepAwake.toString());
+      this.updateWakeLock();
+    });
+    document.addEventListener('visibilitychange', () => this.updateWakeLock());
+
     this.els.resetAllDataBtn.addEventListener('click', () => {
       if (confirm('Do you want to reset your chanting recitations and accuracy scores?')) {
         this.chantCount = 0;
-        this.accuracyScores = [];
-        this.overallAccuracy = 0;
+        this.accuracy = { matched: 0, total: 0 };
+        this.verseScores.clear();
         safeStorage.set('chalisa_chant_count', '0');
+        this.refreshVersePills();
         this.updateStatsDisplay();
-        this.els.settingsModal.classList.remove('open');
+        closeSettings();
       }
     });
 
     this.els.goalPills.forEach(pill => {
       pill.addEventListener('click', (e) => {
-        const goal = parseInt(e.target.dataset.goal, 10);
-        this.els.goalPills.forEach(p => p.classList.remove('active'));
-        e.target.classList.add('active');
+        const goal = parseInt(e.currentTarget.dataset.goal, 10);
+        this.els.goalPills.forEach(p => p.classList.toggle('active', p === e.currentTarget));
         this.sankalpaGoal = goal;
         safeStorage.set('chalisa_sankalpa_goal', goal.toString());
         this.updateStatsDisplay();
@@ -441,7 +559,38 @@ class HanumanChalisaEngine {
       this.els.activeModeName.textContent = 'Tap Sync';
       this.els.hudStatusLabel.textContent = 'Tap Counter';
       this.els.hudTranscript.textContent = 'Tap screen to advance word-by-word with sacred vibration';
+      this.highlightCurrentVerseAndWord();
     }
+    this.updateStatsDisplay();
+    this.updateWakeLock();
+  }
+
+  // ==================== Verse model helpers ====================
+
+  /** Rendered token indices of the words of a line (punctuation tokens excluded). */
+  lineTokenIndices(vIdx, lIdx) {
+    const L = this.lineModel.get(`${vIdx}-${lIdx}`);
+    if (!L) return [];
+    return L.words.map(w => (w.tokenIndex[this.scriptLang] != null ? w.tokenIndex[this.scriptLang] : w.tokenIndex.hi));
+  }
+
+  wordEl(vIdx, lIdx, tokenIndex) {
+    const idx = typeof tokenIndex === 'object'
+      ? (tokenIndex[this.scriptLang] != null ? tokenIndex[this.scriptLang] : tokenIndex.hi)
+      : tokenIndex;
+    return document.getElementById(`word-${vIdx}-${lIdx}-${idx}`);
+  }
+
+  clearLineMarks(vIdx, lIdx) {
+    document.querySelectorAll(`#line-${vIdx}-${lIdx} .word-token`).forEach(el => {
+      el.classList.remove('matched', 'missed', 'passed');
+    });
+  }
+
+  clearAllMarks() {
+    document.querySelectorAll('.word-token.matched, .word-token.missed, .word-token.passed').forEach(el => {
+      el.classList.remove('matched', 'missed', 'passed');
+    });
   }
 
   // ==================== Audio Player Engine ====================
@@ -449,6 +598,10 @@ class HanumanChalisaEngine {
   toggleAudioPlayback() {
     getSharedAudioContext();
     if (this.audio.paused) {
+      if (this.audioFailed) {
+        this.audioFailed = false;
+        this.audio.load();
+      }
       this.audio.play().catch(err => {
         console.warn('Audio play request failed:', err);
       });
@@ -471,11 +624,13 @@ class HanumanChalisaEngine {
       this.els.audioPlayIcon.innerHTML = `<svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
       this.els.hudStatusLabel.textContent = 'Audio Paused';
     }
+    this.updateWakeLock();
   }
 
   setPlaybackSpeed(speed) {
     this.playbackSpeed = speed;
     safeStorage.set('chalisa_speed', speed.toString());
+    this.audio.defaultPlaybackRate = speed; // survives a reload of the media element
     this.audio.playbackRate = speed;
     this.els.paceDisplay.textContent = `${speed}x`;
 
@@ -515,20 +670,16 @@ class HanumanChalisaEngine {
       const lineElapsed = elapsed < half ? elapsed : (elapsed - half);
       const lineFraction = Math.min(0.99, Math.max(0, lineElapsed / half));
 
-      const lineElem = document.getElementById(`line-${this.currentVerseIndex}-${lineIdx}`);
-      if (lineElem) {
-        const words = lineElem.querySelectorAll('.word-token');
-        if (words.length > 0) {
-          const wIdx = Math.floor(lineFraction * words.length);
-          this.highlightActiveWord(this.currentVerseIndex, lineIdx, wIdx);
-        }
+      const tokens = this.lineTokenIndices(this.currentVerseIndex, lineIdx);
+      if (tokens.length > 0) {
+        this.highlightActiveWord(this.currentVerseIndex, lineIdx, tokens[Math.floor(lineFraction * tokens.length)]);
       }
     }
   }
 
   updateSliderUI(curTime) {
     this.els.audioProgressSlider.value = curTime;
-    const pct = (curTime / this.audioDuration) * 100;
+    const pct = Math.min(100, (curTime / this.audioDuration) * 100);
     this.els.sliderFillBar.style.width = `${pct}%`;
     this.els.audioCurrentTime.textContent = this.formatSeconds(curTime);
   }
@@ -539,22 +690,37 @@ class HanumanChalisaEngine {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   }
 
+  // Only the <audio> element's 'ended' event comes here.
   handleAudioEnded() {
-    this.chantCount++;
-    safeStorage.set('chalisa_chant_count', this.chantCount.toString());
-    this.updateStatsDisplay();
-
-    if (this.chantCount >= this.sankalpaGoal) {
-      this.playSacredVictoryChime();
-      alert(`🎉 Sacred Sankalpa Completed!\nYou have completed ${this.chantCount} recitations of Shri Hanuman Chalisa.`);
-    }
-
+    this.countRecitation();
     if (this.isLooping || this.chantCount < this.sankalpaGoal) {
       this.audio.currentTime = 0;
       this.jumpToVerse(0);
       this.audio.play().catch(() => {});
     } else {
       this.setAudioPlayingState(false);
+    }
+  }
+
+  // A full recitation finished in Voice or Tap mode: count it and start the next round.
+  // (Previously this reused handleAudioEnded, which started the audio track
+  // under the reciter's microphone whenever the Sankalpa goal was not reached.)
+  completeRecitation() {
+    this.countRecitation();
+    this.clearAllMarks();
+    this.jumpToVerse(0);
+  }
+
+  countRecitation() {
+    this.chantCount++;
+    safeStorage.set('chalisa_chant_count', this.chantCount.toString());
+    this.updateStatsDisplay();
+
+    if (this.chantCount === this.sankalpaGoal) {
+      this.playSacredVictoryChime();
+      this.showToast(`🎉 Sacred Sankalpa complete: ${this.chantCount} recitation${this.chantCount > 1 ? 's' : ''} of Shri Hanuman Chalisa. Jai Shri Ram!`);
+    } else {
+      this.showToast(`📿 Recitation ${this.chantCount} complete${this.chantCount < this.sankalpaGoal ? ` • ${this.sankalpaGoal - this.chantCount} to go` : ''}`);
     }
   }
 
@@ -569,8 +735,10 @@ class HanumanChalisaEngine {
       this.updateSliderUI(ts.start);
     }
 
+    this.tracker.setPosition(vIdx, 0);
+    CHALISA_DATA.verses[vIdx].lines.forEach((_, lIdx) => this.clearLineMarks(vIdx, lIdx));
     this.onVerseChanged();
-    this.highlightActiveWord(vIdx, 0, 0);
+    this.highlightActiveWord(vIdx, 0, this.lineTokenIndices(vIdx, 0)[0] || 0);
   }
 
   onVerseChanged() {
@@ -594,10 +762,10 @@ class HanumanChalisaEngine {
     }
   }
 
-  highlightActiveWord(vIdx, lIdx, wIdx) {
+  highlightActiveWord(vIdx, lIdx, tokenIdx) {
     document.querySelectorAll('.word-token.glowing').forEach(el => el.classList.remove('glowing'));
 
-    const wordEl = document.getElementById(`word-${vIdx}-${lIdx}-${wIdx}`);
+    const wordEl = document.getElementById(`word-${vIdx}-${lIdx}-${tokenIdx}`);
     if (wordEl) {
       wordEl.classList.add('glowing');
     }
@@ -611,12 +779,34 @@ class HanumanChalisaEngine {
 
   highlightCurrentVerseAndWord() {
     this.onVerseChanged();
-    this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, this.currentWordIndex);
+    const tokens = this.lineTokenIndices(this.currentVerseIndex, this.currentLineIndex);
+    const w = Math.min(this.currentWordIndex, Math.max(0, tokens.length - 1));
+    this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, tokens[w] || 0);
   }
 
-  // ==================== Robust Multilingual AI Voice Sync ====================
+  // ==================== AI Voice Sync ====================
+  //
+  // Engines, in order of preference:
+  //  1. native  - Android SpeechRecognizer via the app's ChantRecognizer plugin.
+  //               Android stops recognising after every pause; the plugin restarts
+  //               it natively (no beep: the system earcon is muted while listening),
+  //               recovers from errors and hangs, pauses in the background, and
+  //               reports each utterance as partial(segment) ... final(segment).
+  //  2. web     - Web Speech API (Chrome, Edge, Safari), restarted on 'end'.
+  //  3. rhythm  - no recogniser: microphone loudness onsets advance the words.
+  //               Nothing is recognised, so nothing is scored.
+  // Only the rhythm engine opens a getUserMedia stream: a second capture next to
+  // a recogniser competes for the microphone on Android.
+
+  getRecognitionLang() {
+    // The verses are Awadhi/Hindi whichever script is on screen, and the Hindi
+    // recogniser transcribes them far better than en-IN. Its Devanagari output
+    // is matched against the English transliteration via phoneticSkeleton().
+    return this.scriptLang === 'bn' ? 'bn-IN' : 'hi-IN';
+  }
 
   async toggleVoiceListening() {
+    if (this.voice.starting) return;
     if (this.isVoiceListening) {
       this.stopVoiceListening();
     } else {
@@ -624,126 +814,282 @@ class HanumanChalisaEngine {
     }
   }
 
+  restartVoiceListening() {
+    this.stopVoiceListening();
+    return this.startVoiceListening();
+  }
+
   async startVoiceListening() {
+    const session = ++this.voiceSession;
+    this.voice = this.freshVoiceState();
+    this.voice.starting = true;
     try {
       getSharedAudioContext();
-
-      // 1. Setup Microphone Stream & Visualizer
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        this.setupMicVisualizer(this.micStream);
-      }
+      if (this.isAudioPlaying) this.audio.pause(); // the track would be "heard" by the mic
 
       this.isVoiceListening = true;
-      this.els.toggleVoiceBtn.classList.add('recording');
-      this.els.voiceBtnText.textContent = 'Stop AI Voice Sync';
-      this.els.voiceWaveBars.classList.add('active');
-      this.els.hudStatusDot.classList.add('pulsing');
-      this.els.hudStatusLabel.textContent = 'Listening Voice...';
+      this.feed.reset();
+      this.tracker.setPosition(this.currentVerseIndex, this.currentLineIndex);
+      this.currentWordIndex = 0;
+      this.setVoiceUi(true);
+      this.highlightExpectedWord();
 
-      const langCode = this.scriptLang === 'bn' ? 'bn-IN' : (this.scriptLang === 'en' ? 'en-IN' : 'hi-IN');
-      const langName = this.scriptLang === 'bn' ? 'বাংলা' : (this.scriptLang === 'en' ? 'English' : 'हिन्दी');
-      this.els.voiceHeardText.textContent = `Chanting in ${langName} activated. Speak into your microphone...`;
+      const lang = this.getRecognitionLang();
+      const plugin = nativeSpeechPlugin();
+      if (plugin && await this.startNativeRecognition(plugin, lang, session)) return;
+      if (!this.isActiveSession(session)) return;
 
-      // 2. Check Capacitor Native Android Speech Recognition Plugin
-      const hasCapSpeech = typeof window !== 'undefined' && 
-                           window.Capacitor && 
-                           window.Capacitor.Plugins && 
-                           window.Capacitor.Plugins.SpeechRecognition;
-
-      if (hasCapSpeech) {
-        try {
-          const capSpeech = window.Capacitor.Plugins.SpeechRecognition;
-          const perm = await capSpeech.requestPermissions();
-          await capSpeech.removeAllListeners();
-          
-          await capSpeech.addListener('partialResults', (data) => {
-            if (data && data.matches && data.matches.length > 0) {
-              this.handleHeardSpeech(data.matches[0]);
-            }
-          });
-
-          await capSpeech.start({
-            language: langCode,
-            maxResults: 5,
-            partialResults: true,
-            popup: false
-          });
-          return;
-        } catch (capErr) {
-          console.warn('Capacitor native speech failed, trying Web Speech API:', capErr);
-        }
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (SR) {
+        this.startWebRecognition(SR, lang, session);
+        return;
       }
-
-      // 3. Fallback to Web Speech API
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        this.recognition = new SpeechRecognition();
-        this.recognition.continuous = true;
-        this.recognition.interimResults = true;
-        this.recognition.lang = langCode;
-
-        this.recognition.onresult = (event) => {
-          let transcript = '';
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            transcript += event.results[i][0].transcript;
-          }
-          this.handleHeardSpeech(transcript);
-        };
-
-        this.recognition.onerror = (err) => {
-          console.warn('Speech Recognition error:', err);
-        };
-
-        this.recognition.onend = () => {
-          if (this.isVoiceListening && this.recognition) {
-            try { this.recognition.start(); } catch (e) {}
-          }
-        };
-
-        this.recognition.start();
-      } else {
-        // 4. Acoustic Voice Cadence VAD Fallback
-        this.els.voiceHeardText.textContent = `Acoustic Chanting Tracker Active: Chant rhythmically into your microphone!`;
-      }
-
+      await this.startRhythmMode(session, plugin
+        ? 'No speech recognition service on this device.'
+        : 'This browser has no speech recognition.');
     } catch (err) {
-      console.error('Microphone access denied or error:', err);
-      alert('Please allow microphone permissions to use AI Voice Sync.');
-      this.stopVoiceListening();
+      console.error('AI Voice Sync failed to start:', err);
+      if (this.isActiveSession(session)) {
+        this.stopVoiceListening('Could not start the microphone. Please allow microphone access and try again.');
+      }
+    } finally {
+      if (session === this.voiceSession) this.voice.starting = false;
     }
   }
 
-  stopVoiceListening() {
-    this.isVoiceListening = false;
-    
-    // Stop Capacitor Speech if present
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
-      try {
-        window.Capacitor.Plugins.SpeechRecognition.stop();
-        window.Capacitor.Plugins.SpeechRecognition.removeAllListeners();
-      } catch (e) {}
+  isActiveSession(session) {
+    return session === this.voiceSession && this.isVoiceListening;
+  }
+
+  backoff(failures) {
+    return Math.min(5000, 300 * Math.pow(2, Math.max(0, failures - 1)));
+  }
+
+  // ---------- 1. Native Android recogniser ----------
+
+  async startNativeRecognition(plugin, lang, session) {
+    let available = false;
+    try {
+      available = !!(await plugin.available()).available;
+    } catch (e) {
+      available = false;
+    }
+    if (!available) return false;
+
+    let perm = null;
+    try { perm = await plugin.checkPermissions(); } catch (e) {}
+    if (!perm || perm.microphone !== 'granted') {
+      try { perm = await plugin.requestPermissions({ permissions: ['microphone'] }); } catch (e) { perm = null; }
+    }
+    if (!this.isActiveSession(session)) return true;
+    if (!perm || perm.microphone !== 'granted') {
+      this.stopVoiceListening(MSG_MIC_PERMISSION);
+      return true;
     }
 
+    const v = this.voice;
+    v.engine = 'native';
+    v.plugin = plugin;
+    v.lang = lang;
+    await settle(() => plugin.removeAllListeners());
+    await plugin.addListener('partial', (data) => this.onNativePartial(session, data));
+    await plugin.addListener('final', (data) => this.onNativeFinal(session, data));
+    await plugin.addListener('error', (data) => this.onNativeError(session, data));
+    await plugin.addListener('state', (data) => this.onNativeState(session, data));
+    if (!this.isActiveSession(session)) return true;
+
+    let started;
+    try {
+      started = await plugin.start({ language: lang, muteBeep: true });
+    } catch (err) {
+      if (!this.isActiveSession(session)) return true;
+      if (err && err.code === 'permission') {
+        this.stopVoiceListening(MSG_MIC_PERMISSION);
+        return true;
+      }
+      // No usable recogniser after all: let the next engine take over.
+      await settle(() => plugin.removeAllListeners());
+      v.engine = null;
+      v.plugin = null;
+      return false;
+    }
+    if (!this.isActiveSession(session)) return true;
+    v.beepMuted = !!(started && started.beepMuted);
+    this.showVoiceStatus(this.listeningMessage(lang));
+    return true;
+  }
+
+  listeningMessage(lang) {
+    return `Listening in ${LANG_NAMES[lang] || lang}… chant aloud.`;
+  }
+
+  nativeStreamKey(session, segment) {
+    return `n${session}-${segment}`;
+  }
+
+  /** Growing transcript of the utterance being spoken. */
+  onNativePartial(session, data) {
+    if (!this.isActiveSession(session) || !data || !data.text) return;
+    this.voice.errorStreak = 0;
+    this.showHeard(data.text);
+    this.processHeardWords(this.feed.update(this.nativeStreamKey(session, data.segment), data.text, false));
+  }
+
+  /** The utterance ended (sent once, also after silence or an error): release its held-back word. */
+  onNativeFinal(session, data) {
+    if (!this.isActiveSession(session) || !data) return;
+    const key = this.nativeStreamKey(session, data.segment);
+    const words = data.text ? this.feed.update(key, data.text, true) : this.feed.flush(key);
+    if (data.text) this.showHeard(data.text);
+    this.processHeardWords(words, true);
+  }
+
+  onNativeError(session, data) {
+    if (!this.isActiveSession(session) || !data) return;
+    const lang = LANG_NAMES[this.voice.lang] || this.voice.lang || 'Hindi';
+    if (!data.fatal) {
+      if (data.code === 'network') {
+        this.showVoiceStatus(`Cannot reach the speech service. Retrying… (With the offline ${lang} speech pack installed, chanting works without internet.)`);
+      }
+      return;
+    }
+    const messages = {
+      permission: MSG_MIC_PERMISSION,
+      language: `${lang} speech recognition is not available on this phone. Connect to the internet, or download the offline ${lang} speech pack (Google app → Settings → Voice → Offline speech recognition), then tap Start again.`,
+      network: `Speech recognition needs an internet connection, or the offline ${lang} speech pack. Tap Start to try again.`,
+      audio: 'Another app is using the microphone. Close it and tap Start again.'
+    };
+    this.stopVoiceListening(messages[data.code] || 'Speech recognition keeps failing. Tap Start to try again, or use Tap Sync.');
+  }
+
+  onNativeState(session, data) {
+    if (!this.isActiveSession(session) || !data) return;
+    if (data.reason === 'background') {
+      this.showVoiceStatus('Paused while the app is in the background. It resumes when you come back.');
+    } else if (data.reason === 'resumed') {
+      this.showVoiceStatus(this.listeningMessage(this.voice.lang));
+    }
+  }
+
+  // ---------- 2. Web Speech API ----------
+
+  startWebRecognition(SR, lang, session) {
+    const v = this.voice;
+    v.engine = 'web';
+    v.lang = lang;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.lang = lang;
+    rec.onresult = (event) => this.onWebResult(session, rec, event);
+    rec.onerror = (event) => this.onWebError(session, rec, event);
+    rec.onend = () => this.onWebEnd(session, rec);
+    this.recognition = rec;
+    v.webRun++;
+    v.webKeys = [];
+    rec.start();
+    this.showVoiceStatus(`Listening in ${LANG_NAMES[lang] || lang}… chant aloud.`);
+  }
+
+  onWebResult(session, rec, event) {
+    if (!this.isActiveSession(session) || rec !== this.recognition) return;
+    const v = this.voice;
+    v.errorStreak = 0;
+    let latest = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const res = event.results[i];
+      const text = res && res[0] && res[0].transcript ? res[0].transcript.trim() : '';
+      if (!text) continue;
+      if (!v.webKeys[i]) {
+        // Chrome on Android repeats the whole utterance in every new result.
+        // Continue the previous stream instead of re-reading its words.
+        const prevRes = i > 0 ? event.results[i - 1] : null;
+        const prev = prevRes && prevRes[0] && prevRes[0].transcript ? prevRes[0].transcript.trim() : '';
+        v.webKeys[i] = prev && v.webKeys[i - 1] && text.indexOf(prev) === 0
+          ? v.webKeys[i - 1]
+          : `w${session}-${v.webRun}-${i}`;
+      }
+      this.processHeardWords(this.feed.update(v.webKeys[i], text, res.isFinal), res.isFinal);
+      if (!this.isActiveSession(session)) return;
+      latest = text;
+    }
+    if (latest) this.showHeard(latest);
+  }
+
+  onWebError(session, rec, event) {
+    if (!this.isActiveSession(session) || rec !== this.recognition) return;
+    const code = event && event.error;
+    const v = this.voice;
+    if (code === 'no-speech' || code === 'aborted') return; // onend restarts
+    if (code === 'not-allowed' || code === 'service-not-allowed') {
+      v.fatal = true;
+      if (isNativeApp()) {
+        this.startRhythmMode(session, 'Speech recognition is not available in this app.').catch(() => {
+          this.stopVoiceListening('Microphone access was denied.');
+        });
+      } else {
+        this.stopVoiceListening('Microphone or speech access is blocked for this site. Allow it in the browser settings and tap Start again.');
+      }
+      return;
+    }
+    if (code === 'language-not-supported') {
+      v.fatal = true;
+      this.startRhythmMode(session, `${LANG_NAMES[v.lang] || v.lang} recognition is not supported here.`).catch(() => {
+        this.stopVoiceListening('Microphone access was denied.');
+      });
+      return;
+    }
+    v.errorStreak++;
+    if (code === 'network') {
+      this.showVoiceStatus('Speech recognition in this browser needs an internet connection. Retrying…');
+    }
+  }
+
+  onWebEnd(session, rec) {
+    const v = this.voice;
+    if (!this.isActiveSession(session) || rec !== this.recognition || v.fatal) return;
+    this.processHeardWords(this.feed.flushAll(), true);
+    if (!this.isActiveSession(session)) return;
+    if (v.errorStreak > 8) {
+      this.stopVoiceListening('Speech recognition stopped responding. Check your connection and tap Start again.');
+      return;
+    }
+    const delay = v.errorStreak ? this.backoff(v.errorStreak) : this.voiceTiming.webRestartDelay;
+    v.restartTimer = setTimeout(() => {
+      v.restartTimer = null;
+      if (!this.isActiveSession(session) || rec !== this.recognition) return;
+      v.webRun++;
+      v.webKeys = [];
+      try { rec.start(); } catch (e) { console.warn('Speech recognition restart failed:', e); }
+    }, delay);
+  }
+
+  // ---------- 3. Rhythm mode (no recogniser) ----------
+
+  async startRhythmMode(session, reason) {
     if (this.recognition) {
-      try { this.recognition.stop(); } catch (e) {}
+      const r = this.recognition;
       this.recognition = null;
+      r.onend = null;
+      r.onresult = null;
+      r.onerror = null;
+      try { r.abort(); } catch (e) {}
     }
-
-    if (this.micStream) {
-      this.micStream.getTracks().forEach(t => t.stop());
-      this.micStream = null;
+    this.voice.engine = 'rhythm';
+    this.updateStatsDisplay();
+    if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+      this.stopVoiceListening(`${reason} Use Tap Sync to follow along.`);
+      return;
     }
-
-    if (this.animFrameId) {
-      cancelAnimationFrame(this.animFrameId);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    if (!this.isActiveSession(session)) {
+      stream.getTracks().forEach(t => t.stop());
+      return;
     }
-
-    this.els.toggleVoiceBtn.classList.remove('recording');
-    this.els.voiceBtnText.textContent = 'Start AI Voice Sync';
-    this.els.voiceWaveBars.classList.remove('active');
-    this.els.hudStatusLabel.textContent = 'Voice Paused';
-    this.els.voiceHeardText.textContent = 'Chanting paused. Tap "Start AI Voice Sync" to resume.';
+    this.micStream = stream;
+    this.setupMicVisualizer(stream);
+    this.showVoiceStatus(`${reason} Rhythm mode: words advance as you chant, but pronunciation cannot be scored.`);
   }
 
   setupMicVisualizer(stream) {
@@ -751,137 +1097,187 @@ class HanumanChalisaEngine {
     if (!ctx) return;
 
     const source = ctx.createMediaStreamSource(stream);
-    this.micAnalyser = ctx.createAnalyser();
-    this.micAnalyser.fftSize = 64;
-    source.connect(this.micAnalyser);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.6;
+    source.connect(analyser);
+    this.micSource = source;
+    this.micAnalyser = analyser;
 
-    const bufferLength = this.micAnalyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    const freq = new Uint8Array(analyser.frequencyBinCount);
+    const wave = new Uint8Array(analyser.fftSize);
     const bars = this.els.voiceWaveBars.querySelectorAll('.wave-bar');
+    this.vad = { floor: 0.01, active: false, lastOnset: 0 };
 
-    const updateBars = () => {
-      if (!this.isVoiceListening) return;
-      this.micAnalyser.getByteFrequencyData(dataArray);
-
-      let sum = 0;
+    const tick = () => {
+      if (!this.isVoiceListening || this.micAnalyser !== analyser) return;
+      analyser.getByteFrequencyData(freq);
       bars.forEach((bar, idx) => {
-        const val = dataArray[idx % bufferLength] || 10;
-        sum += val;
-        const height = Math.max(6, (val / 255) * 26);
-        bar.style.height = `${height}px`;
+        const val = freq[2 + idx * 3] || 0;
+        bar.style.height = `${Math.max(6, (val / 255) * 26)}px`;
       });
-
-      // Acoustic Voice Activity Detection (VAD)
-      const avgVolume = sum / bars.length;
-      if (avgVolume > 38) {
-        this.handleAcousticChantingPulse();
+      analyser.getByteTimeDomainData(wave);
+      let sum = 0;
+      for (let k = 0; k < wave.length; k++) {
+        const x = (wave[k] - 128) / 128;
+        sum += x * x;
       }
-
-      this.animFrameId = requestAnimationFrame(updateBars);
+      this.detectChantOnset(Math.sqrt(sum / wave.length), Date.now());
+      this.animFrameId = requestAnimationFrame(tick);
     };
-
-    updateBars();
+    tick();
   }
 
-  // Handles vocal rhythm when speech recognition is processing or as fallback
-  handleAcousticChantingPulse() {
-    const now = Date.now();
-    if (now - this.lastVoicePulseTime > 750) { // Voice syllable cadence
-      this.lastVoicePulseTime = now;
-      this.voicePulseCount++;
-
-      // Animate active word
-      const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
-      if (verseObj) {
-        const lineObj = verseObj.lines[this.currentLineIndex];
-        const words = (lineObj[this.scriptLang] || lineObj.hi).split(/\s+/).filter(w => w.trim().length > 0);
-        
-        this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, this.currentWordIndex);
-        this.currentWordIndex++;
-
-        if (this.currentWordIndex >= words.length) {
-          this.currentWordIndex = 0;
-          this.recordAccuracy(96); // High fidelity rhythmic chanting
-          this.advanceLine();
-        }
-      }
+  // Edge-triggered onset detector with an adaptive noise floor: a fan, traffic
+  // or a TV raises the floor instead of advancing words forever (the old
+  // detector advanced every 750 ms whenever the level stayed above a constant).
+  detectChantOnset(rms, now) {
+    const vad = this.vad;
+    vad.floor = rms < vad.floor ? vad.floor * 0.95 + rms * 0.05 : vad.floor * 0.999 + rms * 0.001;
+    const on = rms > Math.max(0.02, vad.floor * 3);
+    const off = rms < Math.max(0.012, vad.floor * 1.8);
+    if (!vad.active && on && now - vad.lastOnset > 350) {
+      vad.active = true;
+      vad.lastOnset = now;
+      this.stepWord();
+    } else if (vad.active && off) {
+      vad.active = false;
     }
   }
 
-  // Robust Multilingual Speech Matching using phoneticSkeleton
-  handleHeardSpeech(transcript) {
-    const heardClean = transcript.trim();
-    if (!heardClean) return;
-
-    this.els.voiceHeardText.textContent = `Heard: "${heardClean}"`;
-    this.els.hudTranscript.textContent = `Chanting: "${heardClean}"`;
-
-    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
-    if (!verseObj) return;
-
-    const currentLine = verseObj.lines[this.currentLineIndex];
-    // Multilingual Target Line (matches active script: Bengali, Hindi, or English)
-    const targetText = currentLine[this.scriptLang] || currentLine.hi || currentLine.en;
-    const targetWords = targetText.split(/\s+/).filter(w => w.trim().length > 0);
-
-    // Phonetic Skeletons
-    const getSkeleton = (typeof phoneticSkeleton === 'function') 
-      ? phoneticSkeleton 
-      : (s => s.toLowerCase().replace(/[^a-z0-9]/g, ''));
-
-    const heardSkeleton = getSkeleton(heardClean);
-    const heardTokens = heardClean.split(/\s+/).map(w => getSkeleton(w));
-
-    let matchesCount = 0;
-    targetWords.forEach((tw, idx) => {
-      const cleanW = tw.replace(/[॥।|,]/g, '').trim();
-      const twSkel = getSkeleton(cleanW);
-
-      const isMatch = heardTokens.includes(twSkel) ||
-                      (twSkel.length >= 3 && heardSkeleton.includes(twSkel)) ||
-                      heardClean.toLowerCase().includes(cleanW.toLowerCase());
-
-      if (isMatch) {
-        matchesCount++;
-        const wordEl = document.getElementById(`word-${this.currentVerseIndex}-${this.currentLineIndex}-${idx}`);
-        if (wordEl) {
-          wordEl.classList.add('glowing');
-        }
-      }
-    });
-
-    const lineAccuracy = Math.min(100, Math.round((matchesCount / Math.max(1, targetWords.length)) * 100));
-    if (lineAccuracy >= 50 || matchesCount >= 2) {
-      this.recordAccuracy(Math.max(88, lineAccuracy));
-      this.advanceLine();
+  stopVoiceListening(message) {
+    const v = this.voice;
+    if (this.isVoiceListening && (v.engine === 'native' || v.engine === 'web')) {
+      this.processHeardWords(this.feed.flushAll(), false); // last held-back word
     }
-  }
+    this.isVoiceListening = false;
+    this.voiceSession++; // invalidates callbacks of the session being stopped
 
-  advanceLine() {
-    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
-    if (this.currentLineIndex === 0 && verseObj.lines.length > 1) {
-      this.currentLineIndex = 1;
-      this.currentWordIndex = 0;
-      this.highlightActiveWord(this.currentVerseIndex, 1, 0);
-    } else {
-      if (this.currentVerseIndex < this.totalVerses - 1) {
-        this.jumpToVerse(this.currentVerseIndex + 1);
-      } else {
-        this.handleAudioEnded();
-      }
+    if (v.restartTimer) clearTimeout(v.restartTimer);
+    if (v.engine === 'native' && v.plugin) {
+      settle(() => v.plugin.stop());
+      settle(() => v.plugin.removeAllListeners());
     }
-  }
+    if (this.recognition) {
+      const r = this.recognition;
+      this.recognition = null;
+      r.onend = null;
+      r.onresult = null;
+      r.onerror = null;
+      try { r.stop(); } catch (e) {}
+    }
+    if (this.micStream) {
+      this.micStream.getTracks().forEach(t => t.stop());
+      this.micStream = null;
+    }
+    if (this.micSource) {
+      try { this.micSource.disconnect(); } catch (e) {}
+      this.micSource = null;
+    }
+    this.micAnalyser = null;
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
 
-  recordAccuracy(score) {
-    this.accuracyScores.push(score);
-    const sum = this.accuracyScores.reduce((a, b) => a + b, 0);
-    this.overallAccuracy = Math.round(sum / this.accuracyScores.length);
+    this.feed.reset();
+    this.voice = this.freshVoiceState();
+    this.setVoiceUi(false);
+    this.showVoiceStatus(message || 'Chanting paused. Tap "Start AI Voice Sync" to resume.');
     this.updateStatsDisplay();
+    this.updateWakeLock();
+  }
 
-    const accEl = document.getElementById(`verseAcc-${this.currentVerseIndex}`);
-    if (accEl) {
-      accEl.textContent = `✓ ${score}%`;
+  setVoiceUi(on) {
+    this.els.toggleVoiceBtn.classList.toggle('recording', on);
+    this.els.voiceBtnText.textContent = on ? 'Stop AI Voice Sync' : 'Start AI Voice Sync';
+    this.els.voiceWaveBars.classList.toggle('active', on);
+    this.els.hudStatusDot.classList.toggle('pulsing', on);
+    this.els.hudStatusLabel.textContent = on ? 'Listening Voice...' : 'Voice Paused';
+    this.updateWakeLock();
+  }
+
+  showVoiceStatus(text) {
+    this.els.voiceHeardText.textContent = text;
+  }
+
+  showHeard(transcript) {
+    this.els.voiceHeardText.textContent = `Heard: "${transcript}"`;
+    this.els.hudTranscript.textContent = `Chanting: "${transcript}"`;
+  }
+
+  /** Align newly heard words and reflect the result on the verses. */
+  processHeardWords(words, endOfUtterance = false) {
+    if (!this.isVoiceListening) return;
+    let events = words && words.length ? this.tracker.feed(words) : [];
+    if (endOfUtterance) events = events.concat(this.tracker.endOfUtterance());
+    if (events.length) this.applyTrackerEvents(events);
+  }
+
+  applyTrackerEvents(events) {
+    let completed = false;
+    for (const ev of events) {
+      if (ev.type === 'word') {
+        const el = this.wordEl(ev.verseIndex, ev.lineIndex, ev.tokenIndex);
+        if (el) {
+          el.classList.toggle('matched', ev.status === 'matched');
+          el.classList.toggle('missed', ev.status === 'missed');
+        }
+      } else if (ev.type === 'line') {
+        this.recordLineAccuracy(ev.verseIndex, ev.lineIndex, ev.matched, ev.total);
+      } else if (ev.type === 'advance') {
+        this.clearLineMarks(ev.verseIndex, ev.lineIndex);
+      } else if (ev.type === 'complete') {
+        completed = true;
+      }
     }
+    if (completed) {
+      this.completeRecitation();
+      this.highlightExpectedWord();
+      return;
+    }
+    const pos = this.tracker.position();
+    const verseChanged = pos.verseIndex !== this.currentVerseIndex;
+    this.currentVerseIndex = pos.verseIndex;
+    this.currentLineIndex = pos.lineIndex;
+    this.currentWordIndex = pos.wordIndex;
+    if (verseChanged) this.onVerseChanged();
+    this.highlightExpectedWord();
+  }
+
+  highlightExpectedWord() {
+    const pos = this.tracker.position();
+    const t = this.tracker.expectedTokenIndex(this.scriptLang);
+    if (t != null) this.highlightActiveWord(pos.verseIndex, pos.lineIndex, t);
+  }
+
+  recordLineAccuracy(vIdx, lIdx, matched, total) {
+    this.accuracy.matched += matched;
+    this.accuracy.total += total;
+    if (!this.verseScores.has(vIdx)) this.verseScores.set(vIdx, new Map());
+    this.verseScores.get(vIdx).set(lIdx, { matched, total });
+    this.refreshVersePills(vIdx);
+    this.updateStatsDisplay();
+  }
+
+  refreshVersePills(onlyVerse) {
+    const verses = onlyVerse != null ? [onlyVerse] : CHALISA_DATA.verses.map((_, i) => i);
+    verses.forEach(vIdx => {
+      const pill = document.getElementById(`verseAcc-${vIdx}`);
+      if (!pill) return;
+      const lines = this.verseScores.get(vIdx);
+      if (!lines || !lines.size) {
+        pill.textContent = '';
+        pill.classList.remove('low');
+        return;
+      }
+      let m = 0;
+      let t = 0;
+      lines.forEach(s => { m += s.matched; t += s.total; });
+      const pct = Math.round((100 * m) / Math.max(1, t));
+      pill.textContent = `${pct >= 70 ? '✓' : '•'} ${pct}%`;
+      pill.classList.toggle('low', pct < 70);
+    });
   }
 
   // ==================== Tap Sync Engine ====================
@@ -893,17 +1289,37 @@ class HanumanChalisaEngine {
     if (navigator.vibrate) {
       try { navigator.vibrate(25); } catch (e) {}
     }
+    this.stepWord();
+  }
 
-    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
-    const lineObj = verseObj.lines[this.currentLineIndex];
-    const words = (lineObj[this.scriptLang] || lineObj.hi).split(/\s+/).filter(w => w.trim().length > 0);
-
-    this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex, this.currentWordIndex);
+  /** The glowing word has been chanted: mark it and move to the next one. */
+  stepWord() {
+    const v = this.currentVerseIndex;
+    const l = this.currentLineIndex;
+    const tokens = this.lineTokenIndices(v, l);
+    const el = this.wordEl(v, l, tokens[this.currentWordIndex]);
+    if (el) el.classList.add('passed');
 
     this.currentWordIndex++;
-    if (this.currentWordIndex >= words.length) {
-      this.currentWordIndex = 0;
+    if (this.currentWordIndex >= tokens.length) {
       this.advanceLine();
+    } else {
+      this.highlightActiveWord(v, l, tokens[this.currentWordIndex]);
+    }
+  }
+
+  advanceLine() {
+    const verseObj = CHALISA_DATA.verses[this.currentVerseIndex];
+    if (this.currentLineIndex + 1 < verseObj.lines.length) {
+      this.currentLineIndex++;
+      this.currentWordIndex = 0;
+      this.clearLineMarks(this.currentVerseIndex, this.currentLineIndex);
+      this.highlightActiveWord(this.currentVerseIndex, this.currentLineIndex,
+        this.lineTokenIndices(this.currentVerseIndex, this.currentLineIndex)[0] || 0);
+    } else if (this.currentVerseIndex < this.totalVerses - 1) {
+      this.jumpToVerse(this.currentVerseIndex + 1);
+    } else {
+      this.completeRecitation();
     }
   }
 
@@ -961,21 +1377,67 @@ class HanumanChalisaEngine {
     const progressPct = Math.min(100, Math.round((this.chantCount / this.sankalpaGoal) * 100));
     this.els.sankalpaProgressFill.style.width = `${progressPct}%`;
 
-    if (this.accuracyScores.length > 0) {
-      this.els.accuracyDisplay.textContent = `${this.overallAccuracy}%`;
-      if (this.overallAccuracy >= 95) {
+    if (this.isVoiceListening && this.voice.engine === 'rhythm') {
+      this.els.accuracyDisplay.textContent = '--%';
+      this.els.sacredTierBadge.textContent = 'Rhythm mode';
+    } else if (this.accuracy.total > 0) {
+      const pct = Math.round((100 * this.accuracy.matched) / this.accuracy.total);
+      this.els.accuracyDisplay.textContent = `${pct}%`;
+      // Tiers as documented in README.md
+      if (pct >= 95) {
         this.els.sacredTierBadge.textContent = 'Divya ★★★';
-      } else if (this.overallAccuracy >= 85) {
+      } else if (pct >= 85) {
         this.els.sacredTierBadge.textContent = 'Uttam ★★';
-      } else {
+      } else if (pct >= 70) {
         this.els.sacredTierBadge.textContent = 'Shreshtha ★';
+      } else {
+        this.els.sacredTierBadge.textContent = 'Sadhak';
       }
     } else {
       this.els.accuracyDisplay.textContent = '--%';
-      this.els.sacredTierBadge.textContent = 'Sadhak';
+      this.els.sacredTierBadge.textContent = 'Chant to score';
     }
 
     this.els.paceDisplay.textContent = `${this.playbackSpeed}x`;
+  }
+
+  async updateWakeLock() {
+    if (!('wakeLock' in navigator) || this.wakeLockBusy) return;
+    const want = this.keepAwake && document.visibilityState === 'visible' &&
+      (this.isAudioPlaying || this.isVoiceListening || this.currentMode === 'tap');
+    this.wakeLockBusy = true;
+    try {
+      if (want && !this.wakeLock) {
+        const lock = await navigator.wakeLock.request('screen');
+        this.wakeLock = lock;
+        lock.addEventListener('release', () => {
+          if (this.wakeLock === lock) this.wakeLock = null;
+        });
+      } else if (!want && this.wakeLock) {
+        const lock = this.wakeLock;
+        this.wakeLock = null;
+        await lock.release();
+      }
+    } catch (e) {
+      this.wakeLock = null;
+    } finally {
+      this.wakeLockBusy = false;
+    }
+  }
+
+  showToast(message) {
+    if (!this.toastEl) {
+      const el = document.createElement('div');
+      el.className = 'app-toast';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+      this.toastEl = el;
+    }
+    this.toastEl.textContent = message;
+    this.toastEl.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), 4500);
   }
 
   applyTheme() {
