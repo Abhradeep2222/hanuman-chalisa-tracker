@@ -13,7 +13,9 @@
 ---
 
 ### 📲 **Android APK Download (সরাসরি মোবাইল অ্যাপ ডাউনলোড):**
-👉 **[Click Here to Download HanumanChalisa-v1.0.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases)**
+👉 **[Click Here to Download HanumanChalisa-v1.1.apk](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases/download/v1.1.0/HanumanChalisa-v1.1.apk)**
+
+👉 **[GitHub All Releases Page](https://github.com/Abhradeep2222/hanuman-chalisa-tracker/releases)**
 
 *(ল্যাপটপ অন না রেখেও সরাসরি আপনার মোবাইল ফোনে APK ডাউনলোড ও ইনস্টল করে সম্পূর্ণ অফলাইনে চালিসা পাঠ ও ট্র্যাকিং করুন!)*
 

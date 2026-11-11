@@ -47,29 +47,33 @@ jobs:
 
       - name: Rename APK
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk HanumanChalisa-v1.0.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk HanumanChalisa-v1.1.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: HanumanChalisa-APK
-          path: HanumanChalisa-v1.0.apk
+          path: HanumanChalisa-v1.1.apk
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/master')
         with:
-          tag_name: v1.0.0
-          name: "Shri Hanuman Chalisa Android App v1.0.0"
+          tag_name: v1.1.0
+          name: "Shri Hanuman Chalisa Android App v1.1.0 (Sound Fixed)"
           body: |
-            ## 🕉️ Shri Hanuman Chalisa Android APK
+            ## 🕉️ Shri Hanuman Chalisa Android APK v1.1.0
             
-            Authentic, offline-first devotional Android application with real-time AI speech synchronization, karaoke glow, pronunciation accuracy scoring, and multilingual verse meanings (हिन्दी, বাংলা, English).
+            ### 🔊 Sound & Voice Improvements in this Release:
+            - **Native Android Text-To-Speech:** Native Google TTS engine integration speaks authentic Hindi, Bengali, or English without WebView audio silence.
+            - **Android 11-15 Queries Permission:** Fixed Android package visibility restriction so Google TTS and Google Speech Recognition engines are discoverable by the app.
+            - **AudioContext Singleton:** Resolved hardware context limit (6 max) that previously caused audio dropouts on mobile.
+            - **Resonant Temple Bell Chime:** Replaced electronic beeps with sacred bronze temple bell harmonics.
 
             ### 📲 How to Install:
-            1. Download `HanumanChalisa-v1.0.apk` below directly onto your Android phone.
-            2. Tap the downloaded file to install. (If prompted, allow "Install unknown apps" for your browser).
+            1. Download `HanumanChalisa-v1.1.apk` below directly onto your Android phone.
+            2. Tap the downloaded file to install (select "Update" or "Install").
             3. Open and chant with full devotion! Works 100% offline without requiring any laptop.
-          files: HanumanChalisa-v1.0.apk
+          files: HanumanChalisa-v1.1.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -22,6 +22,23 @@ const safeStorage = {
   }
 };
 
+// Singleton Web Audio Context to prevent mobile hardware limit (6 contexts max)
+let _sharedAudioCtx = null;
+function getSharedAudioContext() {
+  try {
+    if (!_sharedAudioCtx) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        _sharedAudioCtx = new AudioCtx();
+      }
+    }
+    if (_sharedAudioCtx && _sharedAudioCtx.state === 'suspended') {
+      _sharedAudioCtx.resume().catch(() => {});
+    }
+  } catch (e) {}
+  return _sharedAudioCtx;
+}
+
 class HanumanChalisaApp {
   constructor() {
     this.lines = typeof getFlatLines === 'function' ? getFlatLines() : [];
@@ -702,12 +719,14 @@ class HanumanChalisaApp {
     return rec;
   }
 
-  startListening() {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+  async startListening() {
+    const hasCapSpeech = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition);
+    const WebSpeech = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (!hasCapSpeech && !WebSpeech) {
       this.showMobileNotice(
         'Speech Recognition Unavailable',
-        'Your mobile browser restricts Web Speech Recognition. For live AI Voice chanting, open this link in Google Chrome on Android. You can also chant now using "Listen & Learn" or "Tap Sync"!'
+        'Your current browser restricts Web Speech Recognition. For live AI Voice chanting, open this link in Google Chrome on Android or use our installed Android APK!'
       );
       return;
     }
@@ -723,6 +742,53 @@ class HanumanChalisaApp {
     this.els.micLabel.textContent = 'Connecting...';
     this.els.transcriptText.textContent = '🎙️ Please allow mic permission if prompted...';
 
+    // 1. Native Android Speech Recognition inside APK
+    if (hasCapSpeech) {
+      try {
+        const permStatus = await window.Capacitor.Plugins.SpeechRecognition.checkPermissions();
+        if (!permStatus || permStatus.speechRecognition !== 'granted') {
+          const req = await window.Capacitor.Plugins.SpeechRecognition.requestPermissions();
+          if (!req || req.speechRecognition !== 'granted') {
+            this.stopListening();
+            this.showMobileNotice(
+              'Microphone Permission Required',
+              'Please grant microphone permission to enable AI Voice Chanting in the app.'
+            );
+            return;
+          }
+        }
+
+        this.els.micLabel.textContent = 'Mic Active';
+        this.els.startBtnText.textContent = 'Stop Voice';
+        this.els.transcriptText.textContent = 'Chant aloud into your microphone...';
+
+        await window.Capacitor.Plugins.SpeechRecognition.removeAllListeners();
+        await window.Capacitor.Plugins.SpeechRecognition.addListener('partialResults', (data) => {
+          if (data && data.matches && data.matches.length > 0) {
+            const heard = data.matches[0];
+            this.pulseEqualizerBars();
+            this.els.transcriptText.textContent = `Heard: "${heard.slice(-45)}"`;
+            this.matchSpokenSpeech(heard);
+          }
+        });
+
+        await window.Capacitor.Plugins.SpeechRecognition.start({
+          language: this.language === 'bn' ? 'bn-IN' : 'hi-IN',
+          maxResults: 5,
+          prompt: 'Chant Shri Hanuman Chalisa',
+          partialResults: true,
+          popup: false
+        });
+
+        this.startEqualizerAnimation();
+        this.highlightCurrentLine(true);
+        return;
+      } catch (err) {
+        console.warn('Native speech recognition fallback to Web Speech:', err);
+      }
+    }
+
+    // 2. Web Browser Speech Recognition
     try {
       this.recognition = this.createFreshRecognition();
       if (this.recognition) {
@@ -743,6 +809,12 @@ class HanumanChalisaApp {
 
   stopListening() {
     this.isListening = false;
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.SpeechRecognition) {
+      try {
+        window.Capacitor.Plugins.SpeechRecognition.stop();
+        window.Capacitor.Plugins.SpeechRecognition.removeAllListeners();
+      } catch (e) {}
+    }
     if (this.recognition) {
       try { this.recognition.stop(); } catch (e) {}
       this.recognition = null;
@@ -923,6 +995,9 @@ class HanumanChalisaApp {
 
   stopAiRecitation() {
     this.isAiChanting = false;
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech) {
+      try { window.Capacitor.Plugins.TextToSpeech.stop(); } catch (e) {}
+    }
     if (this.speechSynth) {
       try { this.speechSynth.cancel(); } catch (e) {}
     }
@@ -937,7 +1012,7 @@ class HanumanChalisaApp {
     this.els.micLabel.textContent = 'Ready to Chant';
   }
 
-  reciteCurrentLineAudio() {
+  async reciteCurrentLineAudio() {
     if (!this.isAiChanting || this.currentLineIndex >= this.totalLines) {
       if (this.currentLineIndex >= this.totalLines) this.handleCompletion();
       this.stopAiRecitation();
@@ -960,46 +1035,89 @@ class HanumanChalisaApp {
 
     this.els.transcriptText.textContent = `🎵 Chanting: "${vocalText}"`;
 
-    let hasVoice = false;
-    if (this.speechSynth) {
+    // 1. Native Android TTS in APK (High-fidelity, smooth speech)
+    const hasCapTts = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.TextToSpeech);
+    if (hasCapTts) {
       try {
-        const voices = this.speechSynth.getVoices();
-        const prefix = langCode.split('-')[0].toLowerCase();
-        hasVoice = voices.some(v => v.lang && (v.lang.toLowerCase().includes(prefix) || v.lang.toLowerCase().includes('in')));
-      } catch (e) {}
-    }
+        let wIdx = 0;
+        const totalDurationMs = Math.max(2000, tokens.length * 560) / this.recitationSpeed;
+        const stepTime = totalDurationMs / tokens.length;
 
-    if (this.speechSynth && hasVoice) {
-      this.speechSynth.cancel();
-      const utter = new SpeechSynthesisUtterance(vocalText);
-      utter.rate = this.recitationSpeed * 0.82;
-      utter.pitch = 1.0;
-      utter.lang = langCode;
-
-      let wIdx = 0;
-      utter.onboundary = (e) => {
-        if (e.name === 'word' && wIdx < tokens.length) {
+        const wordIntervalId = setInterval(() => {
+          if (!this.isAiChanting || wIdx >= tokens.length) {
+            clearInterval(wordIntervalId);
+            return;
+          }
           this.highlightWord(this.currentLineIndex, wIdx);
           wIdx++;
           this.totalMatchedWords++;
           this.totalAttemptedWords++;
           this.calculateRealtimeAccuracy();
-        }
-      };
+        }, stepTime);
 
-      utter.onend = () => {
+        await window.Capacitor.Plugins.TextToSpeech.speak({
+          text: vocalText,
+          lang: langCode,
+          rate: this.recitationSpeed * 0.85,
+          pitch: 1.0,
+          volume: 1.0
+        });
+
+        clearInterval(wordIntervalId);
+        while (wIdx < tokens.length) {
+          this.highlightWord(this.currentLineIndex, wIdx);
+          wIdx++;
+        }
+
         if (!this.isAiChanting) return;
         this.completeCurrentLine();
-        setTimeout(() => {
+        this.aiKaraokeTimer = setTimeout(() => {
           if (this.isAiChanting) this.reciteCurrentLineAudio();
         }, 320);
-      };
+        return;
+      } catch (err) {
+        console.warn('Capacitor TTS fallback to Web Speech:', err);
+      }
+    }
 
-      utter.onerror = () => {
+    // 2. Web Browser Speech Synthesis
+    if (this.speechSynth) {
+      try {
+        this.speechSynth.cancel();
+        if (this.speechSynth.paused) this.speechSynth.resume();
+
+        const utter = new SpeechSynthesisUtterance(vocalText);
+        utter.rate = this.recitationSpeed * 0.82;
+        utter.pitch = 1.0;
+        utter.lang = langCode;
+
+        let wIdx = 0;
+        utter.onboundary = (e) => {
+          if (e.name === 'word' && wIdx < tokens.length) {
+            this.highlightWord(this.currentLineIndex, wIdx);
+            wIdx++;
+            this.totalMatchedWords++;
+            this.totalAttemptedWords++;
+            this.calculateRealtimeAccuracy();
+          }
+        };
+
+        utter.onend = () => {
+          if (!this.isAiChanting) return;
+          this.completeCurrentLine();
+          setTimeout(() => {
+            if (this.isAiChanting) this.reciteCurrentLineAudio();
+          }, 320);
+        };
+
+        utter.onerror = () => {
+          this.runCalibratedKaraoke(tokens);
+        };
+
+        this.speechSynth.speak(utter);
+      } catch (e) {
         this.runCalibratedKaraoke(tokens);
-      };
-
-      this.speechSynth.speak(utter);
+      }
     } else {
       this.runCalibratedKaraoke(tokens);
     }
@@ -1015,7 +1133,6 @@ class HanumanChalisaApp {
       if (wIdx < tokens.length) {
         const token = tokens[wIdx];
         this.highlightWord(this.currentLineIndex, wIdx);
-        this.playSoftNote();
         wIdx++;
         this.totalMatchedWords++;
         this.totalAttemptedWords++;
@@ -1229,48 +1346,48 @@ class HanumanChalisaApp {
     }
   }
 
-  // ==================== Synthesized Web Audio Tones ====================
+  // ==================== Resonant Temple Bell Chimes ====================
 
   playDivineChime() {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const ctx = getSharedAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.14);
-
-      gain.gain.setValueAtTime(0.07, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.6);
+      // Temple Bell 3-Harmonic Chime (C6 + E6 + G6 major triad)
+      const freqs = [523.25, 659.25, 783.99, 1046.5];
+      const gains = [0.06, 0.04, 0.03, 0.015];
+      freqs.forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now);
+        gain.gain.setValueAtTime(gains[i], now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.85);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.9);
+      });
     } catch (e) {}
   }
 
   playSoftNote() {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
+      const ctx = getSharedAudioContext();
+      if (!ctx) return;
+      const now = ctx.currentTime;
+
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-
-      gain.gain.setValueAtTime(0.015, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-
+      osc.frequency.setValueAtTime(587.33, now);
+      gain.gain.setValueAtTime(0.02, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
       osc.connect(gain);
       gain.connect(ctx.destination);
-
-      osc.start();
-      osc.stop(ctx.currentTime + 0.16);
+      osc.start(now);
+      osc.stop(now + 0.17);
     } catch (e) {}
   }
 
