@@ -20,6 +20,40 @@
   const MODEL_URL = 'models/hindi-chant-v1.tar.gz'; // versioned: a new model gets a new name (cache)
   const VOSK_URL = 'vendor/vosk.js';
   const LEVEL_INTERVAL_MS = 100;
+  const MODEL_RATE = 16000; // the model works at 16 kHz: send that, not the mic's 48 kHz
+
+  /**
+   * Streaming downsampler (e.g. 48 kHz -> 16 kHz): averages over the step
+   * (a simple anti-alias filter) and carries the remainder between chunks.
+   * A third of the samples means a third of the recogniser's work, which is
+   * what keeps a slower phone in real time.
+   */
+  function makeDownsampler(from, to) {
+    if (!from || from <= to) return null;
+    const ratio = from / to;
+    const taps = Math.max(1, Math.round(ratio));
+    let carry = new Float32Array(0);
+    let phase = 0;
+    return (input) => {
+      const buf = new Float32Array(carry.length + input.length);
+      buf.set(carry);
+      buf.set(input, carry.length);
+      const out = new Float32Array(Math.ceil(buf.length / ratio) + 1);
+      let n = 0;
+      let t = phase;
+      while (t + taps <= buf.length) {
+        const i = Math.floor(t);
+        let acc = 0;
+        for (let k = 0; k < taps; k++) acc += buf[i + k];
+        out[n++] = acc / taps;
+        t += ratio;
+      }
+      const keep = Math.floor(t);
+      carry = buf.slice(keep);
+      phase = t - keep;
+      return out.subarray(0, n);
+    };
+  }
 
   let voskLoad = null;
   let modelLoad = null;
@@ -200,6 +234,7 @@
       if (this.ctx.state === 'suspended') await this.ctx.resume().catch(() => {});
       this.source = this.ctx.createMediaStreamSource(this.stream);
       this.node = this.ctx.createScriptProcessor(4096, 1, 1);
+      this.downsample = makeDownsampler(this.ctx.sampleRate, MODEL_RATE);
       this.node.onaudioprocess = (ev) => this.onAudio(ev);
       this.source.connect(this.node);
       this.node.connect(this.ctx.destination); // ScriptProcessor only runs when connected (it outputs silence)
@@ -227,7 +262,8 @@
       if (!this.running || this.paused || !this.rec) return;
       const input = ev.inputBuffer;
       try {
-        this.rec.acceptWaveform(input);
+        if (this.downsample) this.rec.acceptWaveformFloat(this.downsample(input.getChannelData(0)), MODEL_RATE);
+        else this.rec.acceptWaveform(input);
       } catch (e) {
         this.errors++;
       }
@@ -249,7 +285,8 @@
     newRecognizer(grammar) {
       if (!grammar) return;
       const old = this.rec;
-      const rec = new this.model.KaldiRecognizer(this.ctx ? this.ctx.sampleRate : 48000, JSON.stringify(grammar));
+      const rate = this.downsample ? MODEL_RATE : (this.ctx ? this.ctx.sampleRate : MODEL_RATE);
+      const rec = new this.model.KaldiRecognizer(rate, JSON.stringify(grammar));
       rec.seg = ++this.segment;
       rec.lastPartial = '';
       this.grammarSize = grammar.length;
