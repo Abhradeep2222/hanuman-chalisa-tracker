@@ -1,4 +1,6 @@
-## 🕉️ Shri Hanuman Chalisa v1.6.0: a chanting recogniser that runs on your phone
+## 🕉️ Shri Hanuman Chalisa v1.6.1: a chanting recogniser that runs on your phone
+
+> **Fix in v1.6.1:** the v1.6.0 APK did not contain the speech model (Android's packaging renamed it), so AI Voice Sync quietly used the phone's speech service instead. v1.6.1 includes the model, and every build now checks for it. Please install v1.6.1.
 
 ### 🎙️ AI Voice Sync listens on the phone itself
 - A new recogniser (Vosk, open source) now runs inside the app and is the default. It works **offline**, the same way with or without internet, and **never beeps**, because it never restarts. Phone sounds are no longer muted while you chant.

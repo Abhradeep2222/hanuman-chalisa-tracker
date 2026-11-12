@@ -1,6 +1,6 @@
 {
   "name": "hanuman-chalisa-chant-tracker",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Hanuman Chalisa Chanting Tracker with Speech Recognition, Real-time Sync & Accuracy Scoring",
   "scripts": {
     "start": "npx serve .",

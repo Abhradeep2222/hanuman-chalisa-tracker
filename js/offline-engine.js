@@ -17,7 +17,9 @@
 (function (root) {
   'use strict';
 
-  const MODEL_URL = 'models/hindi-chant-v1.tar.gz'; // versioned: a new model gets a new name (cache)
+  // Versioned (a new model gets a new name, the cache is per URL). Not ".gz": Android's
+  // packaging unpacks .gz assets and drops the extension, so the APK would not find it.
+  const MODEL_URL = 'models/hindi-chant-v1.tgz';
   const VOSK_URL = 'vendor/vosk.js';
   const LEVEL_INTERVAL_MS = 100;
   const MODEL_RATE = 16000; // the model works at 16 kHz: send that, not the mic's 48 kHz

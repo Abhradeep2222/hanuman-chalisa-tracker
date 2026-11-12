@@ -110,6 +110,11 @@ jobs:
           "$TOOLS/apksigner" verify --print-certs HanumanChalisa.apk | tee apk-signature.txt
           "$TOOLS/aapt" dump badging HanumanChalisa.apk | head -1 | tee -a apk-signature.txt
           unzip -l HanumanChalisa.apk | grep -E "assets/public/js/(app|speech-matcher)\.js"
+          # The on-device recogniser must ship byte for byte (Android repackages some assets, e.g. .gz)
+          for f in models/hindi-chant-v1.tgz vendor/vosk.js js/offline-engine.js js/offline-lexicon.js; do
+            unzip -p HanumanChalisa.apk "assets/public/$f" | cmp - "$f" || { echo "::error::$f is missing or altered in the APK"; exit 1; }
+            echo "APK contains $f (identical)"
+          done
           cp HanumanChalisa.apk "HanumanChalisa-v${{ steps.version.outputs.version }}.apk"
 
       - name: Upload APK Artifact
