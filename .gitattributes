@@ -1,0 +1,5 @@
+# Third-party engine and model: keep the exact tested bytes
+vendor/vosk.js -text
+models/** binary
+fonts/*.woff2 binary
+*.png binary
