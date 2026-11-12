@@ -45,4 +45,13 @@ if (fs.existsSync(audioSrcDir)) {
   }
 }
 
+// Copy bundled fonts and icons (the APK has no network for them)
+for (const dir of ['fonts', 'icons']) {
+  const src = path.join(root, dir);
+  if (!fs.existsSync(src)) continue;
+  const dest = path.join(dist, dir);
+  fs.mkdirSync(dest, { recursive: true });
+  for (const f of fs.readdirSync(src)) fs.copyFileSync(path.join(src, f), path.join(dest, f));
+}
+
 console.log('Web assets successfully packaged into dist/');

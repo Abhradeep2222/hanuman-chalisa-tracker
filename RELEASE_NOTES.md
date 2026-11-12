@@ -1,24 +1,31 @@
-## 🕉️ Shri Hanuman Chalisa v1.4.1: press Start and just chant
+## 🕉️ Shri Hanuman Chalisa v1.5.0: a new look, and a voice sync that learns you
 
-### ✅ AI Voice Sync now starts on every phone
-- **Fixed:** on Samsung phones (e.g. Galaxy S23) with the বাংলা script, AI Voice Sync stopped with "speech recognition is not available". The app now tries every recogniser on the phone: Google's first (the one Gboard voice typing uses), then the phone's default and any others. If a language is missing it moves to the next one (Hindi, then Bengali, then English) without showing an error.
-- Recognition now runs in **Hindi for every script**. The verses are the same Awadhi words in Hindi, Bengali or English letters, and Hindi recognition is on almost every phone. Your words are still matched against the script on screen.
-- **The screen stays on while you chant.** Before, the screen could turn off after about 30 seconds, which paused the microphone.
+### 🔇 The beeps are gone on Samsung phones too
+- Android 14/15 phones (Samsung included) play the recogniser's start and stop beeps on the notification and system sound channels, not on media. While AI Voice Sync listens, the app now mutes those channels as well.
+- Everything is restored the moment you tap **Stop**, switch modes or leave the app, and after a crash on the next start. A channel you had muted yourself is never touched.
+- While you chant, phone notification sounds are silent too. Calls and notifications still show on screen.
 
-### 🎙️ Follows your voice at any pace
-- **Slow chanting:** a pause inside a line no longer closes the line early, and each word lights up within a second of saying it, without waiting for the next word.
-- **Fast chanting:** words the recogniser runs together ("ज्ञानगुन", "तीनोंलोककाँपै") are split back into words, so they count. Revised or merged words are never counted twice.
-- **Soft voice:** even when a third of the words are lost, the Chalisa completes in order. A live level meter shows the microphone hears you, and a hint appears if your voice is too soft.
-- Accuracy is never shown higher than what was really recognised.
+### 🎙️ Hears your chanting better
+- **Stays in Hindi.** If the recogniser fails for a moment, the app now retries or moves to another recogniser in the same language. It never slides into English, which garbled Awadhi words ("abudhika Mel…" for "प्रभु मुद्रिका मेलि"). Only a language that is truly missing makes it change language.
+- **Remembers what works.** The recogniser that recognised your chanting is tried first next time.
+- **Downloads what is missing.** If the phone has the Hindi speech pack but not downloaded (Android 13+), the app asks Android to download it once, and says so.
+- **Knows what comes next.** On Android 13+, the line you are on and the next two lines go to the recogniser as hints, so it favours the Chalisa's words.
+- **Learns your voice.** When the recogniser keeps hearing one word of yours differently (for example "मुंदरी" for "मुद्रिका"), the app remembers that form for that exact word. From the second time on, the word counts. This is stored on your phone only; Settings → **Forget** clears it.
+- Settings now shows a **Voice diagnostics** line: which recogniser and language are in use, its errors, and whether the beep is muted. A screenshot of it shows exactly what is happening on your phone.
 
-### 📱 Display
-- The header no longer sits under the phone's status bar (clock, camera and battery icons). It also clears the camera cutout in landscape.
+### 🪔 New logo and design
+- A new logo: the sun that child Hanuman leapt for ("जुग सहस्र जोजन पर भानू"), with his gada in front. It is the app icon, the splash screen and the header mark.
+- A warmer look, as if reading by a diya: sindoor and temple brass on a lamp-lit dark, or kumkum on sandal in the day theme.
+- The title shows in the script you read (श्री हनुमान चालीसा / শ্রী হনুমান চালিসা / Shri Hanuman Chalisa).
+- Verses are set in Tiro, typefaces made for Indic book printing, and the interface in Mukta. The fonts now ship inside the app, so the APK looks right offline.
+- The phone's status-bar icons follow the app's light/dark theme.
 
-### 🧪 Tested
-- 42 native tests: beep-free restarts, the recogniser and language fallbacks, failures, background/resume.
-- 48 web tests, including whole recitations chanted slow, fast, softly and with different recogniser behaviours.
-- A sweep of 30 simulated recitations per chanting style.
+### ✅ Tested
+- 47 native tests: beep guard on all channels, staying in the same language, language download, route memory, diagnostics.
+- 51 web tests, including voice learning across recitations and verse hints.
+- Whole recitations chanted slow, fast, softly and with different recogniser behaviours.
+- The layout was checked at 320–1280 px in both themes and all three scripts.
 
-### 📲 Install / update
-- **From v1.4.0:** open the APK below. It installs straight over your current app and keeps your count and streak.
+### 📲 Update
+- **From v1.4.x:** open the APK below. It installs over your app and keeps your count and streak.
 - **From v1.3 or older:** uninstall the old app once, then install.

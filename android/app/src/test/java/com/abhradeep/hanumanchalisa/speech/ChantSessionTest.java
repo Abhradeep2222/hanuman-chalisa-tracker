@@ -136,6 +136,7 @@ public class ChantSessionTest {
         utterance("जय", "जय हनुमान", "जय हनुमान ज्ञान गुन सागर");
         assertEquals(Arrays.asList(
             "state:on:started",
+            "route:default/hi-IN:working",
             "partial:1:जय",
             "partial:1:जय हनुमान",
             "partial:1:जय हनुमान ज्ञान गुन सागर",
@@ -343,18 +344,69 @@ public class ChantSessionTest {
     }
 
     @Test
-    public void aRouteThatNeverWorksIsAbandonedAfterThreeFailures() {
-        rec.routes = new java.util.ArrayList<>(Arrays.asList("bixby/bn-IN", "google/bn-IN"));
+    public void aRouteThatNeverWorksIsAbandonedAfterFourFailures() {
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("bixby/hi-IN", "google/hi-IN"));
         session.start();
         session.onError(a(), ChantSession.ERROR_SERVER);
         clock.advance(300);
         session.onError(a(), ChantSession.ERROR_CLIENT);
         clock.advance(600);
         session.onError(a(), ChantSession.ERROR_SERVER);
-        assertEquals("route:google/bn-IN:failing", events.last());
+        clock.advance(1200);
+        assertEquals("three failures are still retried on the same recogniser", 0, rec.route);
+        session.onError(a(), ChantSession.ERROR_SERVER);
+        assertEquals("route:google/hi-IN:failing", events.last());
         clock.advance(120);
-        utterance("জয় হনুমান");
+        utterance("जय हनुमान");
         assertTrue(session.isListening());
+        assertEquals(1, rec.proven);
+    }
+
+    @Test
+    public void aFailingRecogniserNeverPushesTheChantIntoAnotherLanguage() {
+        // the screenshot case: Hindi failing for a while must not end up in English
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("google/hi-IN", "google/bn-IN", "google/en-IN"));
+        session.start();
+        for (int i = 0; i < 30 && session.isRunning(); i++) {
+            session.onError(a(), i % 2 == 0 ? ERROR_RECOGNIZER_BUSY : ChantSession.ERROR_CLIENT);
+            clock.advance(5000);
+        }
+        assertEquals("still Hindi", 0, rec.route);
+        assertEquals(0, events.count("route:"));
+        assertEquals(1, events.count("fatal:failed"));
+    }
+
+    @Test
+    public void missingLanguagePackIsDownloadedForNextTime() {
+        rec.downloadSupported = true;
+        rec.routes = new java.util.ArrayList<>(Arrays.asList("google/hi-IN", "default/hi-IN"));
+        session.start();
+        session.onError(a(), ChantSession.ERROR_LANGUAGE_UNAVAILABLE);
+        assertEquals(Collections.singletonList("hi-IN"), rec.downloads);
+        assertEquals(1, events.count("notice:download"));
+        assertEquals("route:default/hi-IN:language", events.last());
+        assertEquals(0, events.count("fatal"));
+    }
+
+    @Test
+    public void aWorkingRouteIsRememberedOnce() {
+        session.start();
+        utterance("जय हनुमान");
+        clock.advance(200);
+        utterance("जय कपीस");
+        assertEquals(1, rec.proven);
+        assertEquals(1, events.count("route:default/hi-IN:working"));
+    }
+
+    @Test
+    public void errorCodesAreCountedForDiagnostics() {
+        session.start();
+        session.onError(a(), ERROR_NETWORK);
+        clock.advance(300);
+        session.onError(a(), ERROR_NETWORK);
+        clock.advance(600);
+        session.onError(a(), ERROR_RECOGNIZER_BUSY);
+        assertEquals("2x2 8x1", session.errorSummary());
     }
 
     @Test
@@ -367,7 +419,7 @@ public class ChantSessionTest {
             session.onError(a(), ERROR_NETWORK);
             clock.advance(5000);
         }
-        assertEquals(0, events.count("route:"));
+        assertEquals(0, events.count("route:google/bn-IN:failing") + events.count("route:default/bn-IN"));
         assertEquals(0, rec.route);
     }
 

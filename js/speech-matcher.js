@@ -42,6 +42,10 @@
   const RESYNC_MAX_LINES = 12;   // ... growing by one line per 2 unplaceable words, up to this
   const PENDING_LIMIT = 8;       // unmatched heard words kept for backfilling skipped words
   const RESYNC_MAX_GAP = 2;      // expected words that may be missing between two re-anchor words
+  const ALIAS_MIN_SEEN = 2;      // a learned form counts once the reciter produced it this often
+  const ALIAS_MAX_PER_WORD = 3;  // learned forms kept per word position
+
+  const aliasKey = (L, q) => `${L.verseIndex}-${L.lineIndex}-${q}`;
 
   function tokenize(text) {
     return String(text || '').split(/\s+/).filter(Boolean);
@@ -283,6 +287,8 @@
     constructor(verses, options = {}) {
       this.lines = buildLineModel(verses);
       this.lookahead = options.lookahead != null ? options.lookahead : LOOKAHEAD;
+      this.aliases = new Map(); // "verse-line-word" -> Map(skeleton -> times seen)
+      if (options.aliases) this.importAliases(options.aliases);
       this.setPosition(0, 0);
     }
 
@@ -351,7 +357,7 @@
       for (const heard of this.pending) {
         for (let p = pos; p < stream.length; p++) {
           const w = stream[p].word;
-          if (!w.weak && bestSimilarity(heard, w.keys) >= STRONG_THRESHOLD) {
+          if (!w.weak && bestSimilarity(heard, this.keysAt(this.lines[stream[p].lineIdx], stream[p].q)) >= STRONG_THRESHOLD) {
             hits.push(stream[p]);
             pos = p + 1;
             break;
@@ -479,7 +485,7 @@
         for (let d = 0; d <= (k === 0 ? 0 : RESYNC_MAX_GAP); d++) {
           const item = stream[pos + d];
           if (!item) break;
-          const s = bestSimilarity(heard[k], item.word.keys);
+          const s = bestSimilarity(heard[k], this.keysAt(this.lines[item.lineIdx], item.q));
           if (s >= MATCH_THRESHOLD) {
             found = pos + d;
             if (d > 1) wideGap = true;
@@ -504,19 +510,20 @@
         const skip = p - from;
         const word = L.words[p];
         const nextWord = L.words[p + 1];
-        const candidates = [{ heardLen: 1, wordLen: 1, heard: skels[i], keys: word.keys, weak: word.weak }];
+        const wordKeys = this.keysAt(L, p); // spellings + this reciter's learned forms
+        const candidates = [{ heardLen: 1, wordLen: 1, heard: skels[i], keys: wordKeys, weak: word.weak }];
         // Compounds split or merged differently by the recogniser. Only when no
         // single word explains the pair, otherwise "जय कपीस" would be glued
         // into one fuzzy match for "कपीस" and swallow the "जय".
         if (skels[i + 1] &&
-            bestSimilarity(skels[i], word.keys) < MATCH_THRESHOLD &&
-            bestSimilarity(skels[i + 1], word.keys) < MATCH_THRESHOLD) {
+            bestSimilarity(skels[i], wordKeys) < MATCH_THRESHOLD &&
+            bestSimilarity(skels[i + 1], wordKeys) < MATCH_THRESHOLD) {
           // "पवन कुमार" heard for the single token "पवन-कुमार"
           candidates.push({ heardLen: 2, wordLen: 1, heard: skels[i] + skels[i + 1], keys: word.keys, weak: false });
         }
         if (nextWord &&
-            bestSimilarity(skels[i], word.keys) < MATCH_THRESHOLD &&
-            bestSimilarity(skels[i], nextWord.keys) < MATCH_THRESHOLD) {
+            bestSimilarity(skels[i], wordKeys) < MATCH_THRESHOLD &&
+            bestSimilarity(skels[i], this.keysAt(L, p + 1)) < MATCH_THRESHOLD) {
           // "रामदूत" heard for the two tokens "राम दूत"
           const joined = SCRIPTS.filter(sc => word.skelBy[sc] && nextWord.skelBy[sc])
             .map(sc => word.skelBy[sc] + nextWord.skelBy[sc]);
@@ -554,29 +561,108 @@
     apply(match, events) {
       const pending = this.pending.slice(0, Math.max(0, match.usable));
       let j = 0;
+      const used = new Set();
       const passOver = (to) => {
+        const missed = [];
         for (let q = this.cursor; q < to; q++) {
           let hit = -1;
           for (let x = j; x < pending.length; x++) {
-            if (bestSimilarity(pending[x], this.line.words[q].keys) >= MATCH_THRESHOLD) { hit = x; break; }
+            if (bestSimilarity(pending[x], this.keysAt(this.line, q)) >= MATCH_THRESHOLD) { hit = x; break; }
           }
-          if (hit >= 0) { j = hit + 1; this.mark(q, 'matched', events); } else this.mark(q, 'missed', events);
+          if (hit >= 0) { j = hit + 1; used.add(hit); this.mark(q, 'matched', events); } else { missed.push(q); this.mark(q, 'missed', events); }
         }
         this.cursor = Math.max(this.cursor, to);
+        return missed;
       };
       for (let k = 0; k < match.lineOffset && !this.done; k++) {
         passOver(this.line.words.length);
         this.finishLine(events);
       }
       if (this.done) return;
-      for (const p of match.positions) {
-        passOver(p);
+      match.positions.forEach((p, n) => {
+        const missed = passOver(p);
+        // Within one line, the words heard between two confirmed matches belong
+        // to the words that were missed between them: learn how this reciter's
+        // chanting of those words is transcribed.
+        if (n === 0 && match.lineOffset === 0 && missed.length) {
+          const unexplained = pending.filter((_, x) => !used.has(x));
+          if (unexplained.length === missed.length && missed.length <= 3) {
+            missed.forEach((q, x) => this.learn(this.line, q, unexplained[x], events));
+          }
+        }
         this.mark(p, 'matched', events);
         this.cursor = p + 1;
-      }
+      });
       this.pending = [];
       this.lost = 0;
       if (this.cursor >= this.line.words.length) this.finishLine(events);
+    }
+
+    /** Match keys of word q of line L: its spellings plus this reciter's learned forms. */
+    keysAt(L, q) {
+      const word = L.words[q];
+      const learned = this.aliases.get(aliasKey(L, q));
+      if (!learned) return word.keys;
+      const active = [];
+      for (const [skel, count] of learned) if (count >= ALIAS_MIN_SEEN) active.push(skel);
+      return active.length ? word.keys.concat(active) : word.keys;
+    }
+
+    /**
+     * Remember that, for this reciter, word q of line L came out of the
+     * recogniser as `skel`. Used at that position only, and only once seen
+     * ALIAS_MIN_SEEN times; never when it resembles a neighbouring word.
+     */
+    learn(L, q, skel, events) {
+      if (!skel || skel.length < 2) return;
+      const lineIdx = this.lines.indexOf(L);
+      for (let off = 0; off <= 1; off++) {
+        const other = this.lines[lineIdx + off];
+        if (!other) continue;
+        for (let k = 0; k < other.words.length; k++) {
+          if (off === 0 && k === q) continue;
+          if (bestSimilarity(skel, other.words[k].keys) >= MATCH_THRESHOLD) return; // ambiguous
+        }
+      }
+      const key = aliasKey(L, q);
+      let learned = this.aliases.get(key);
+      if (!learned) this.aliases.set(key, (learned = new Map()));
+      learned.set(skel, (learned.get(skel) || 0) + 1);
+      if (learned.size > ALIAS_MAX_PER_WORD) {
+        // keep the most frequent forms
+        const keep = [...learned.entries()].sort((a, b) => b[1] - a[1]).slice(0, ALIAS_MAX_PER_WORD);
+        this.aliases.set(key, (learned = new Map(keep)));
+      }
+      events.push({ type: 'learn', key, skel, count: learned.get(skel) || 0 });
+    }
+
+    /** Learned forms as plain data (for storage). */
+    exportAliases() {
+      const out = {};
+      for (const [key, learned] of this.aliases) out[key] = Object.fromEntries(learned);
+      return out;
+    }
+
+    importAliases(data) {
+      this.aliases = new Map();
+      if (!data || typeof data !== 'object') return;
+      for (const [key, forms] of Object.entries(data)) {
+        if (!/^\d+-\d+-\d+$/.test(key) || !forms || typeof forms !== 'object') continue;
+        const learned = new Map();
+        for (const [skel, count] of Object.entries(forms)) {
+          if (typeof skel === 'string' && skel.length >= 2 && Number.isFinite(count) && count > 0) learned.set(skel, Math.min(99, count));
+        }
+        if (learned.size) this.aliases.set(key, learned);
+      }
+    }
+
+    /** Words with at least one active learned form. */
+    learnedWordCount() {
+      let n = 0;
+      for (const learned of this.aliases.values()) {
+        for (const count of learned.values()) if (count >= ALIAS_MIN_SEEN) { n++; break; }
+      }
+      return n;
     }
 
     mark(q, status, events) {

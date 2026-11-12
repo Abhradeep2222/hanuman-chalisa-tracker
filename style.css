@@ -1,57 +1,76 @@
 /* ==========================================================================
-   Shri Hanuman Chalisa - Divine Luxury Temple Obsidian & Saffron Gold Theme
-   Mobile-First Architecture • 100% Fully Responsive on All Devices
+   Shri Hanuman Chalisa - "Reading by the sanctum diya"
+   Sindoor (Hanuman's vermilion) and temple brass on a lamp-lit dark,
+   kumkum on sandal paste for the day theme. Mobile-first.
    ========================================================================== */
 
 :root {
-  /* Divine Saffron Gold Palette */
-  --gold-primary: #F59E0B;
-  --gold-bright: #FFB800;
-  --gold-light: #FEF3C7;
-  --saffron-deep: #EA580C;
-  --saffron-fire: #C2410C;
-  --saffron-gradient: linear-gradient(135deg, #FFB800 0%, #F59E0B 50%, #EA580C 100%);
-  --saffron-glow: 0 0 24px rgba(245, 158, 11, 0.45);
-  --saffron-glow-lg: 0 0 36px rgba(245, 158, 11, 0.65);
+  /* Sindoor & brass */
+  --sindoor: #E4572E;
+  --sindoor-deep: #C4421C;          /* button fill: 5:1 with --on-sindoor */
+  --on-sindoor: #FFF4E6;
+  --accent-fill: #E0A33C;           /* brass: active word, selected pills */
+  --on-accent: #2A0F08;
+  --gold-primary: #E0A33C;
+  --gold-bright: #F2C873;
+  --gold-light: #FBE7BF;
+  --saffron-deep: #E4572E;
+  --saffron-fire: #C4421C;
+  --saffron-gradient: linear-gradient(135deg, #F2C873 0%, #E0A33C 45%, #E4572E 100%);
+  --saffron-glow: 0 0 24px rgba(224, 163, 60, 0.35);
+  --saffron-glow-lg: 0 0 36px rgba(224, 163, 60, 0.5);
 
-  /* Deep Luxury Obsidian & Glass */
-  --bg-dark: #0B0E14;
-  --bg-card: rgba(18, 22, 31, 0.88);
-  --bg-card-hover: rgba(26, 32, 44, 0.92);
-  --bg-elevated: rgba(30, 37, 51, 0.95);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --border-gold: rgba(245, 158, 11, 0.35);
-  --border-gold-bright: rgba(255, 184, 0, 0.85);
+  /* Sanctum surfaces: warm soot, not blue-black */
+  --bg-dark: #170D0A;
+  --bg-card: #21130E;
+  --bg-card-hover: #291811;
+  --bg-elevated: #2E1B14;
+  --surface-2: #2B1912;
+  --header-bg: rgba(23, 13, 10, 0.93);
+  --hud-bg: rgba(23, 13, 10, 0.96);
+  --border-subtle: rgba(244, 231, 212, 0.09);
+  --border-gold: rgba(224, 163, 60, 0.32);
+  --border-gold-bright: rgba(242, 200, 115, 0.8);
 
-  /* Sacred Accents */
-  --sacred-green: #10B981;
-  --sacred-green-glow: 0 0 14px rgba(16, 185, 129, 0.6);
-  --text-pure: #FFFFFF;
-  --text-muted: #94A3B8;
-  --text-dim: #64748B;
-  --text-saffron: #FDE68A;
+  /* Text: chandan */
+  --sacred-green: #7CC48A;          /* tulsi: recognised words */
+  --sacred-green-glow: 0 0 14px rgba(124, 196, 138, 0.45);
+  --text-pure: #F6EAD8;
+  --text-verse: #EADBC6;
+  --text-muted: #C2A88F;
+  --text-dim: #937862;
+  --text-saffron: #F2C873;
 
-  /* Typography */
-  --font-serif: 'Cinzel', serif;
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-dev: 'Noto Serif Devanagari', serif;
-  --font-bn: 'Noto Serif Bengali', serif;
-  
-  --verse-font-size: 1.25rem;
+  /* Typography: Tiro (cut for Indic book printing) for the verses, Mukta for the interface */
+  --font-serif: 'Tiro Devanagari Hindi', 'Noto Serif Devanagari', Georgia, serif;
+  --font-sans: 'Mukta', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-dev: 'Tiro Devanagari Hindi', 'Noto Serif Devanagari', serif;
+  --font-bn: 'Tiro Bangla', 'Noto Serif Bengali', serif;
+
+  --verse-font-size: 1.3rem;
 }
 
 [data-theme="light"] {
-  --bg-dark: #FDF9F2;
-  --bg-card: rgba(255, 255, 255, 0.92);
-  --bg-card-hover: rgba(255, 250, 240, 0.96);
-  --bg-elevated: #FFF1DE;
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --border-gold: rgba(217, 119, 6, 0.4);
-  --border-gold-bright: rgba(217, 119, 6, 0.9);
-  --text-pure: #1E293B;
-  --text-muted: #475569;
-  --text-dim: #94A3B8;
-  --text-saffron: #9A3412;
+  --bg-dark: #F6EADB;
+  --bg-card: #FFF8EF;
+  --bg-card-hover: #FFF3E3;
+  --bg-elevated: #FBEBD6;
+  --surface-2: #F3E2CC;
+  --header-bg: rgba(246, 234, 219, 0.95);
+  --hud-bg: rgba(246, 234, 219, 0.97);
+  --border-subtle: rgba(59, 26, 16, 0.12);
+  --border-gold: rgba(143, 86, 10, 0.32);
+  --border-gold-bright: rgba(143, 86, 10, 0.8);
+  --gold-primary: #A8690F;
+  --gold-bright: #8F560A;
+  --accent-fill: #8F560A;
+  --on-accent: #FFF8EF;
+  --sacred-green: #2E7D4F;
+  --text-pure: #3B1A10;
+  --text-verse: #43200F;
+  --text-muted: #6E4B3A;
+  --text-dim: #977662;
+  --text-saffron: #9A3A12;
 }
 
 /* ==================== Reset & Base ==================== */
@@ -133,9 +152,9 @@ body {
 }
 
 .sacred-yantra-icon {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
   border-radius: 50%;
   background: var(--saffron-gradient);
   display: flex;
@@ -157,9 +176,9 @@ body {
 
 .brand-title {
   font-family: var(--font-serif);
-  font-size: clamp(0.95rem, 3.5vw, 1.25rem);
-  font-weight: 800;
-  letter-spacing: 0.5px;
+  font-size: clamp(1.15rem, 3vw, 1.45rem);
+  font-weight: 400;
+  letter-spacing: 0;
   background: var(--saffron-gradient);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1379,11 +1398,11 @@ body[data-lang="en"] .verse-line {
 
   /* keep the two-row header compact: reading space matters more */
   .temple-header { padding: calc(6px + env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 6px max(10px, env(safe-area-inset-left, 0px)); }
-  .sacred-yantra-icon { width: 32px; height: 32px; min-width: 32px; }
+  .sacred-yantra-icon { width: 38px; height: 38px; min-width: 38px; }
   .temple-header .icon-circle-btn { width: 36px; height: 36px; }
   .temple-header .lang-btn { min-height: 30px; padding: 4px 12px; }
   .temple-header .header-pill-btn { min-height: 32px; }
-  .brand-title { font-size: clamp(0.85rem, 4vw, 1.1rem); letter-spacing: 0.2px; }
+  .brand-title { font-size: clamp(1.05rem, 5vw, 1.25rem); letter-spacing: 0; }
 }
 
 @media (max-width: 400px) {
@@ -1394,7 +1413,7 @@ body[data-lang="en"] .verse-line {
 
 @media (max-width: 340px) {
   .brand-title {
-    font-size: 0.8rem;
+    font-size: 1rem;
   }
 }
 
@@ -1471,6 +1490,549 @@ body[data-lang="en"] .verse-line {
   }
 
   :root {
-    --verse-font-size: 1.15rem;
+    --verse-font-size: 1.22rem;
   }
+}
+
+/* ==================== 11. Design v6: reading by the sanctum diya ====================
+   Colours come from the tokens at the top; this layer only changes surfaces,
+   type and states. Sizes stay in the rules above (their phone media queries). */
+
+body {
+  font-family: var(--font-sans);
+}
+
+.temple-ambient-glow {
+  background: radial-gradient(ellipse at 50% -14%, rgba(224, 163, 60, 0.15) 0%, rgba(228, 87, 46, 0.05) 42%, transparent 72%);
+}
+
+[data-theme="light"] .temple-ambient-glow {
+  background: radial-gradient(ellipse at 50% -14%, rgba(244, 162, 58, 0.24) 0%, transparent 70%);
+}
+
+/* ---- Header: the mark and the title in the script being read ---- */
+
+.temple-header,
+[data-theme="light"] .temple-header {
+  background: var(--header-bg);
+  border-bottom-color: var(--border-gold);
+}
+
+.sacred-yantra-icon {
+  background: none;
+  box-shadow: none;
+  animation: none;
+  border-radius: 50%;
+}
+
+.brand-mark {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 0 8px rgba(244, 162, 58, 0.38));
+}
+
+.brand-title {
+  font-family: var(--font-dev);
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  color: var(--gold-bright);
+  line-height: 1.25;
+  padding-top: 2px;
+}
+
+.brand-title:lang(bn),
+.brand-sub:lang(bn) {
+  font-family: var(--font-bn);
+}
+
+.brand-sub {
+  font-family: var(--font-dev);
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.header-pill-btn {
+  background: transparent;
+  border-color: var(--border-gold);
+  color: var(--gold-bright);
+  font-family: var(--font-dev);
+  font-size: 0.86rem;
+  font-weight: 400;
+}
+
+.lang-switch-group {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+}
+
+.lang-btn {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.lang-btn.active,
+.speed-btn.active,
+.pill-option.active,
+.goal-pill.active {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.icon-circle-btn,
+.nav-step-btn {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+}
+
+.nav-step-btn {
+  color: var(--text-pure);
+}
+
+/* ---- Mode tabs: quiet, the selected one lit from within ---- */
+
+.mode-tabs,
+[data-theme="light"] .mode-tabs {
+  background: var(--bg-card);
+  border-color: var(--border-subtle);
+  border-radius: 18px;
+}
+
+.mode-tab .tab-icon {
+  font-size: 0;
+  line-height: 0;
+  margin-bottom: 4px;
+}
+
+.mode-tab .tab-label {
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.mode-tab .tab-badge {
+  font-size: 0.7rem;
+  font-weight: 400;
+  opacity: 0.8;
+}
+
+.mode-tab.active {
+  background: var(--surface-2);
+  color: var(--text-pure);
+  box-shadow: inset 0 0 0 1px var(--border-gold-bright);
+}
+
+.mode-tab.active .tab-icon {
+  color: var(--gold-primary);
+  transform: none;
+}
+
+.mode-tab.active .tab-badge {
+  color: var(--gold-bright);
+  font-weight: 500;
+}
+
+/* ---- Console ---- */
+
+.control-console {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border-subtle);
+  border-radius: 22px;
+  box-shadow: 0 20px 44px -28px rgba(0, 0, 0, 0.75);
+}
+
+[data-theme="light"] .control-console {
+  box-shadow: 0 18px 40px -30px rgba(90, 40, 10, 0.45);
+}
+
+.primary-action-btn {
+  background: var(--sindoor-deep);
+  color: var(--on-sindoor);
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  box-shadow: 0 12px 26px -12px rgba(228, 87, 46, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.primary-action-btn:active {
+  box-shadow: 0 6px 16px -10px rgba(228, 87, 46, 0.75);
+}
+
+.primary-action-btn.playing,
+.primary-action-btn.recording {
+  background: #8E1F15;
+  color: var(--on-sindoor);
+  box-shadow: 0 0 0 4px rgba(228, 87, 46, 0.2), 0 12px 26px -12px rgba(142, 31, 21, 0.9);
+}
+
+/* listening: a slow ring, the one moving thing on screen */
+.primary-action-btn.recording::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 2px solid rgba(242, 200, 115, 0.55);
+  animation: listenRing 2.4s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes listenRing {
+  0% { transform: scale(1); opacity: 0.9; }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+
+.btn-glow-aura {
+  display: none;
+}
+
+.sacred-slider {
+  background: var(--surface-2);
+}
+
+.sacred-slider::-webkit-slider-thumb {
+  background: var(--accent-fill);
+  border-color: var(--bg-card);
+  box-shadow: 0 0 0 4px rgba(224, 163, 60, 0.22);
+}
+
+.time-label {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.speed-pill-group,
+.pill-select-group {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+}
+
+.tool-pill-btn,
+.tap-reset-btn,
+.hud-quick-jump-btn,
+.goal-pill {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  border-radius: 999px;
+}
+
+.tool-pill-btn:active,
+.tool-pill-btn.active {
+  background: rgba(224, 163, 60, 0.16);
+  border-color: var(--gold-primary);
+  color: var(--gold-bright);
+}
+
+.voice-feedback-card {
+  background: var(--surface-2);
+  border-color: var(--border-subtle);
+  border-radius: 16px;
+}
+
+.wave-bar {
+  background: var(--gold-primary);
+}
+
+.voice-heard-pill {
+  font-style: normal;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.tap-action-card {
+  background: rgba(224, 163, 60, 0.06);
+  border-color: var(--border-gold);
+  border-radius: 16px;
+}
+
+.tap-circle-pulse {
+  background: var(--accent-fill);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+
+.tap-title {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
+/* ---- Stats ---- */
+
+.stat-card {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 16px;
+}
+
+.stat-title {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.stat-main-val {
+  font-weight: 700;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-progress-line {
+  background: var(--surface-2);
+}
+
+.stat-progress-fill {
+  background: linear-gradient(90deg, var(--saffron-deep), var(--gold-primary));
+}
+
+.sacred-tier-badge {
+  background: transparent;
+  color: var(--gold-bright);
+  border-color: var(--border-gold);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-weight: 600;
+}
+
+/* ---- Sankalpa ---- */
+
+.sankalpa-quick-bar,
+[data-theme="light"] .sankalpa-quick-bar {
+  background: var(--bg-card);
+  border-radius: 16px;
+}
+
+.sankalpa-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.goal-pill {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Verses: the reading surface ---- */
+
+.verse-card {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border-subtle);
+  border-radius: 20px;
+}
+
+.verse-card.active-verse,
+[data-theme="light"] .verse-card.active-verse {
+  border-color: var(--border-gold-bright);
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(224, 163, 60, 0.13), transparent 62%),
+    var(--bg-card);
+  box-shadow: 0 24px 46px -28px rgba(224, 163, 60, 0.6);
+}
+
+[data-theme="light"] .verse-card.active-verse {
+  background:
+    radial-gradient(120% 70% at 50% 0%, rgba(244, 162, 58, 0.18), transparent 62%),
+    var(--bg-card);
+  box-shadow: 0 22px 40px -30px rgba(143, 86, 10, 0.55);
+}
+
+.verse-badge {
+  font-family: var(--font-sans);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gold-bright);
+  background: transparent;
+  border-color: var(--border-gold);
+  border-radius: 999px;
+  padding: 1px 10px;
+}
+
+.verse-acc-pill {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.verse-acc-pill.low {
+  color: var(--saffron-deep);
+}
+
+.verse-line {
+  color: var(--text-verse);
+  line-height: 1.8;
+}
+
+.verse-line.active-line {
+  color: var(--text-pure);
+}
+
+/* the lamp: the word being chanted */
+.word-token.glowing {
+  background: var(--accent-fill) !important;
+  color: var(--on-accent) !important;
+  font-weight: inherit !important;
+  box-shadow: 0 0 0 3px rgba(224, 163, 60, 0.22), 0 8px 20px -8px rgba(244, 162, 58, 0.95) !important;
+  transform: none;
+}
+
+.word-token.passed {
+  color: var(--gold-bright);
+}
+
+.word-token.matched {
+  color: var(--sacred-green);
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentColor;
+}
+
+[data-theme="light"] .word-token.matched {
+  color: var(--sacred-green);
+}
+
+.word-token.missed {
+  opacity: 0.8;
+  text-decoration-color: var(--saffron-deep);
+}
+
+.verse-meaning-box,
+[data-theme="light"] .verse-meaning-box {
+  background: var(--surface-2);
+  border-left-color: var(--saffron-deep);
+  border-radius: 6px 12px 12px 6px;
+  color: var(--text-muted);
+  font-style: normal;
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.meaning-label {
+  color: var(--text-saffron);
+  font-weight: 600;
+}
+
+/* ---- Bottom HUD ---- */
+
+.floating-hud,
+[data-theme="light"] .floating-hud {
+  background: var(--hud-bg);
+  border-top-color: var(--border-gold);
+}
+
+.status-dot {
+  background: var(--saffron-deep);
+}
+
+.hud-status-label {
+  color: var(--gold-bright);
+}
+
+.hud-mini-equalizer span {
+  background: var(--gold-primary);
+}
+
+/* ---- Settings sheet ---- */
+
+.bottom-sheet-card,
+[data-theme="light"] .bottom-sheet-card {
+  background: var(--bg-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.sheet-drag-handle {
+  background: var(--border-gold);
+}
+
+.sheet-title-group h2 {
+  color: var(--text-pure);
+  font-weight: 700;
+}
+
+.close-sheet-btn,
+.font-size-btn {
+  background: var(--surface-2);
+  color: var(--text-pure);
+}
+
+.toggle-slider {
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--sindoor-deep);
+}
+
+.setting-item-stack .pill-option {
+  flex-shrink: 0;
+  border: 1px solid var(--border-gold);
+  color: var(--gold-bright);
+  padding: 6px 14px;
+}
+
+.voice-diagnostics {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+  margin-top: -6px;
+}
+
+.danger-pill-btn {
+  border-radius: 999px;
+}
+
+.app-toast {
+  border-radius: 16px;
+}
+
+/* ---- Accessibility floor ---- */
+
+:focus-visible {
+  outline: 2px solid var(--gold-bright);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.pill-icon,
+.tool-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+
+/* the Latin title is the longest: keep it whole on 320px phones */
+@media (max-width: 340px) {
+  .brand-title:lang(en) {
+    font-size: 0.94rem;
+  }
+}
+
+/* form controls use the interface font, not the browser default */
+button,
+input,
+select {
+  font-family: inherit;
 }

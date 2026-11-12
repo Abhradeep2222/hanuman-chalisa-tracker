@@ -186,3 +186,44 @@ test('the screen is kept on while listening and released after Stop', async () =
   await wait(0);
   assert.equal(plugin.awake.at(-1), false);
 });
+
+test('verse hints: the recogniser is told the current and next lines, and updated as the chant moves on', async () => {
+  const { app, plugin, ctx } = await startNative({ verse: 2 });
+  const first = plugin.contexts.at(-1);
+  assert.ok(first.includes('जय हनुमान ज्ञान गुन सागर'), 'current line');
+  assert.ok(first.includes('जय कपीस तिहुँ लोक उजागर'), 'next line');
+  assert.ok(first.length <= 40);
+  plugin.emit('partial', { segment: 1, text: lineWords(ctx, 2, 0).join(' ') });
+  plugin.emit('final', { segment: 1, text: lineWords(ctx, 2, 0).join(' ') });
+  await wait(0);
+  assert.ok(plugin.contexts.at(-1)[0].startsWith('जय कपीस'), 'moved on with the reciter');
+  app.stopVoiceListening();
+});
+
+test('voice learning: a word this reciter always says differently is learned, saved and scored the third time', async () => {
+  const storage = {};
+  let last = null;
+  for (let round = 1; round <= 3; round++) {
+    const { app, plugin, ctx, storage: store } = await startNative({ verse: 20, storage });
+    const words = lineWords(ctx, 20, 0).map(w => (w === 'मुद्रिका' ? 'मुंदरी' : w));
+    plugin.emit('partial', { segment: 1, text: words.join(' ') });
+    plugin.emit('final', { segment: 1, text: words.join(' ') });
+    last = [app.accuracy.matched, app.accuracy.total];
+    app.stopVoiceListening(); // saves what was learned
+    storage.chalisa_voice_learning = store.get('chalisa_voice_learning');
+  }
+  assert.deepEqual(last, [5, 5], 'third round: the learned form counts');
+  assert.match(storage.chalisa_voice_learning, /"20-0-1"/);
+});
+
+test('settings show voice diagnostics while listening and can forget the learned voice data', async () => {
+  const { app, getEl, storage } = await startNative({ verse: 2, storage: { chalisa_voice_learning: JSON.stringify({ '20-0-1': { mndr: 2 } }) } });
+  assert.equal(app.tracker.learnedWordCount(), 1);
+  await app.refreshVoiceDiagnostics();
+  assert.match(getEl('voiceDiagnostics').textContent, /Google app · hi-IN · route 1\/6 .* beep muted · verse hints on/);
+  assert.match(getEl('voiceLearningDesc').textContent, /1 word is heard/);
+  app.tracker.importAliases(null);
+  app.saveLearningSoon(true);
+  assert.equal(storage.get('chalisa_voice_learning'), '{}');
+  app.stopVoiceListening();
+});

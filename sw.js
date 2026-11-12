@@ -1,6 +1,6 @@
 // Shri Hanuman Chalisa - Offline Service Worker (website only; not registered in the APK)
 // Bump CACHE_NAME whenever a cached file changes so old caches are dropped on activate.
-const CACHE_NAME = 'hanuman-chalisa-v5';
+const CACHE_NAME = 'hanuman-chalisa-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -9,7 +9,11 @@ const ASSETS = [
   './js/chalisa-data.js',
   './js/speech-matcher.js',
   './js/app.js',
-  './manifest.json'
+  './manifest.json',
+  './fonts/fonts.css',
+  './icons/mark.svg',
+  './icons/icon-192.png',
+  './icons/favicon-32.png'
 ];
 
 self.addEventListener('install', (e) => {

@@ -101,6 +101,29 @@ public class BeepGuardTest {
     }
 
     @Test
+    public void allBeepStreamsAreMutedAndRestoredEvenIfOneIsRefused() {
+        final int notification = 5, system = 1; // AudioManager.STREAM_NOTIFICATION / STREAM_SYSTEM
+        Fakes.Volume v = new Fakes.Volume() {
+            @Override
+            public void setMuted(int stream, boolean m) {
+                if (m && stream == notification) throw new SecurityException("Do Not Disturb");
+                super.setMuted(stream, m);
+            }
+        };
+        Fakes.Ledger l = new Fakes.Ledger();
+        BeepGuard g = new BeepGuard(v, l, MUSIC, notification, system);
+        assertTrue(g.engage());
+        assertTrue(v.isMuted(MUSIC));
+        assertTrue(v.isMuted(system));
+        assertFalse(v.isMuted(notification));
+        assertArrayEquals(new int[] { MUSIC, system }, l.stored);
+        g.release();
+        assertFalse(v.isMuted(MUSIC));
+        assertFalse(v.isMuted(system));
+        assertArrayEquals(new int[0], l.stored);
+    }
+
+    @Test
     public void disabledGuardDoesNothingAndDisablingReleases() {
         guard.engage();
         guard.setEnabled(false);

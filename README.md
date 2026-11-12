@@ -23,7 +23,7 @@
 
 ---
 
-## ✨ Features & Capabilities (v1.4.0)
+## ✨ Features & Capabilities (v1.5.0)
 
 ### 🎵 1. Soulful Devotional Audio & Radiant Word-by-Word Karaoke Sync
 - **Authentic Devotional Recitation:** Integrated iconic, melodious rendition of Shri Hanuman Chalisa by Hariharan Ji with sacred bells, shankh, and flute.
@@ -43,14 +43,15 @@
   - ✨ **Uttam ★★ (85% - 94%)**: Auspicious, pure chanting.
   - 🙏 **Shreshtha ★ (70% - 84%)**: Devoted seeker.
   - 📿 **Sadhak (< 70%)**: Chanting practice.
-- **Engines:** Android app → native Android speech recogniser through the app's own `ChantRecognizer` plugin, which restarts it instantly after every pause and keeps the system "listening" beep muted while AI Voice Sync is on (media volume is restored on Stop, on leaving the app, and after a crash); browsers → Web Speech API (Chrome, Edge, Safari). With no recogniser available, **Rhythm mode** advances words on your chanting rhythm but does not score.
+- **Learns your voice:** when the recogniser keeps hearing one of your words differently, that form is remembered for that exact word (on the phone only; Settings → Forget clears it). On Android 13+ the current and next lines are sent to the recogniser as hints.
+- **Engines:** Android app → native Android speech recogniser through the app's own `ChantRecognizer` plugin. It restarts the recogniser instantly after every pause and keeps the system beeps muted while AI Voice Sync is on: media, notification and system sounds, restored on Stop, on leaving the app and after a crash. It stays in the chosen language when a recogniser fails, remembers the recogniser that worked, and asks Android to download a missing speech pack. Settings shows a voice diagnostics line. Browsers → Web Speech API (Chrome, Edge, Safari). With no recogniser available, **Rhythm mode** advances words on your chanting rhythm but does not score.
 
 ### 👆 3. Tap Sync (Mala Counter Mode)
 - **Silent & Meditative Chanting:** Tap anywhere on the mobile screen to advance word-by-word.
 - **Sacred Bell Chimes & Haptic Feedback:** Vibrates subtly (`navigator.vibrate`) with a resonant 528Hz bronze temple tone.
 
 ### 📱 4. Redesigned Mobile-First Sacred Temple Architecture
-- **Midnight Obsidian & Royal Saffron Aesthetics:** Designed with deep temple dark tones (`#0B0E14`), glowing saffron amber highlights, and glassmorphic card layers.
+- **"Reading by the sanctum diya" design:** sindoor and temple brass on a lamp-lit dark, or kumkum on sandal in the day theme. The logo is the sun child Hanuman leapt for, with his gada. The title follows the script you read. Verses are set in Tiro Devanagari Hindi / Tiro Bangla and the interface in Mukta, all bundled for offline use.
 - **100% Fluid Mobile Responsiveness:** Fully optimized for all phone screen widths (320px, 360px, 390px, 412px, 480px) and desktops with zero horizontal overflow.
 - **Touch-Friendly Controls:** Larger touch targets on touch screens (36–44px; script buttons 30px).
 - **Settings Bottom Sheet (Drawer):** Easily adjust font size (`A-` / `A+`), meaning languages, and screen wake lock.

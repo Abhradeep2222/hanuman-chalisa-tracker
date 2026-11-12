@@ -1,18 +1,36 @@
 {
-  "name": "Shri Hanuman Chalisa - Divine AI Chanting Tracker",
+  "name": "Shri Hanuman Chalisa",
   "short_name": "Hanuman Chalisa",
-  "description": "Authentic Shri Hanuman Chalisa with real-time AI speech recognition, karaoke glow, pronunciation accuracy score, and multilingual meanings.",
+  "description": "Read, listen to and chant the Shri Hanuman Chalisa in Hindi, Bengali or English letters, with word-by-word voice tracking and recitation counts.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#08090D",
-  "theme_color": "#F59E0B",
+  "background_color": "#1C0D08",
+  "theme_color": "#1C0D08",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='128' fill='%2308090D'/><circle cx='256' cy='256' r='200' fill='none' stroke='%23F59E0B' stroke-width='16'/><polygon points='256,96 304,208 424,208 328,284 364,396 256,328 148,396 184,284 88,208 208,208' fill='%23F59E0B'/></svg>",
-      "sizes": "192x192 512x512",
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/mark.svg",
+      "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
     }
   ]
 }

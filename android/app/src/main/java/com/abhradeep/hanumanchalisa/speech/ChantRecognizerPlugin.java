@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ResolveInfo;
 import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -67,6 +68,7 @@ public class ChantRecognizerPlugin extends Plugin {
     static final String MICROPHONE = "microphone";
     private static final String PREFS = "chant_recognizer";
     private static final String KEY_MUTED = "muted_streams";
+    private static final String KEY_ROUTE = "route_";
 
     /** Google app's recognition service: online + downloaded offline languages. */
     static final ComponentName GOOGLE_RECOGNIZER = new ComponentName(
@@ -99,13 +101,26 @@ public class ChantRecognizerPlugin extends Plugin {
     private boolean jsWantsAwake;
     private long lastLevelAt;
     private static final long LEVEL_INTERVAL_MS = 100;
+    private SharedPreferences prefs;
+    private String requestedLanguage = "hi-IN";
+    /** Upcoming verse text: Android 13+ recognisers bias their results toward it. */
+    private final ArrayList<String> biasPhrases = new ArrayList<>();
 
     @Override
     public void load() {
         Context ctx = getContext();
         AudioManager audio = (AudioManager) ctx.getSystemService(Context.AUDIO_SERVICE);
         SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        guard = new BeepGuard(new AndroidVolume(audio), new PrefsLedger(prefs), AudioManager.STREAM_MUSIC);
+        this.prefs = prefs;
+        // Android 14/15 (Samsung included) plays the recogniser's start/stop
+        // beeps on the notification and system streams, older versions on media.
+        guard = new BeepGuard(
+            new AndroidVolume(audio),
+            new PrefsLedger(prefs),
+            AudioManager.STREAM_MUSIC,
+            AudioManager.STREAM_NOTIFICATION,
+            AudioManager.STREAM_SYSTEM
+        );
         session = new ChantSession(new AndroidRecognizer(), new JsEvents(), new MainScheduler(), guard, new ChantSession.Timing());
         // A previous run that was killed while listening may have left media muted.
         main.post(() -> guard.recoverFromCrash());
@@ -158,7 +173,17 @@ public class ChantRecognizerPlugin extends Plugin {
     private void planRoutes(String requested, List<String> fallbacks) {
         routes.clear();
         routeIndex = 0;
+        requestedLanguage = requested;
         List<ComponentName> services = recognitionServices();
+        // The service that recognised this language last time goes first.
+        String remembered = prefs == null ? null : prefs.getString(KEY_ROUTE + requested, null);
+        if (remembered != null) {
+            ComponentName c = "default".equals(remembered) ? null : ComponentName.unflattenFromString(remembered);
+            if ((c == null && "default".equals(remembered)) || (c != null && services.contains(c))) {
+                services.remove(c);
+                services.add(0, c);
+            }
+        }
         Set<String> languages = new LinkedHashSet<>();
         languages.add(requested);
         languages.addAll(fallbacks);
@@ -166,6 +191,24 @@ public class ChantRecognizerPlugin extends Plugin {
             for (ComponentName service : services) routes.add(new Route(service, lang));
         }
         Logger.debug("ChantRecognizer", "routes: " + routes.size() + " (" + services.size() + " services)");
+    }
+
+    /** Verse text the reciter is about to chant, from the web layer. */
+    @PluginMethod
+    public void setContext(PluginCall call) {
+        final ArrayList<String> phrases = new ArrayList<>();
+        JSArray list = call.getArray("phrases");
+        if (list != null) {
+            for (int i = 0; i < list.length() && phrases.size() < 40; i++) {
+                String p = list.optString(i, "").trim();
+                if (!p.isEmpty()) phrases.add(p);
+            }
+        }
+        main.post(() -> {
+            biasPhrases.clear();
+            biasPhrases.addAll(phrases);
+            call.resolve();
+        });
     }
 
     /** Google's recogniser first, then the phone's default, then every other installed service. */
@@ -238,8 +281,14 @@ public class ChantRecognizerPlugin extends Plugin {
                 .put("listening", session.isListening())
                 .put("paused", session.isPaused())
                 .put("attempts", session.attemptsStarted())
-                .put("beepMuted", session.beepMuted());
-            if (!routes.isEmpty()) state.put("language", route().language).put("service", route().serviceName());
+                .put("beepMuted", session.beepMuted())
+                .put("errors", session.errorSummary())
+                .put("sdk", Build.VERSION.SDK_INT)
+                .put("biasing", Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !biasPhrases.isEmpty());
+            if (!routes.isEmpty()) {
+                state.put("language", route().language).put("service", route().serviceName());
+                state.put("route", (routeIndex + 1) + "/" + routes.size());
+            }
             call.resolve(state);
         });
     }
@@ -270,6 +319,14 @@ public class ChantRecognizerPlugin extends Plugin {
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getContext().getPackageName());
         // Lets Google's recogniser run through short pauses inside a line.
         intent.putExtra("android.speech.extra.DICTATION_MODE", true);
+        // Slow chanters pause between words: ask for a longer silence before the
+        // utterance ends (fewer restarts, fewer lost words; ignored by some services).
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2500L);
+        intent.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !biasPhrases.isEmpty()) {
+            // Android 13+: favour the words of the lines being chanted.
+            intent.putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, new ArrayList<>(biasPhrases));
+        }
         return intent;
     }
 
@@ -294,11 +351,34 @@ public class ChantRecognizerPlugin extends Plugin {
         }
 
         @Override
-        public boolean fallBack() {
-            if (routeIndex + 1 >= routes.size()) return false;
+        public boolean fallBack(boolean sameLanguage) {
+            String lang = route().language;
+            int next = -1;
+            for (int i = routeIndex + 1; i < routes.size(); i++) {
+                if (!sameLanguage || routes.get(i).language.equals(lang)) {
+                    next = i;
+                    break;
+                }
+            }
+            if (next < 0) return false;
             destroy();
-            routeIndex++;
+            routeIndex = next;
             Logger.debug("ChantRecognizer", "falling back to " + route().serviceName() + " / " + route().language);
+            return true;
+        }
+
+        @Override
+        public void proven() {
+            Route r = route();
+            if (prefs == null || !r.language.equals(requestedLanguage)) return; // remember only real successes
+            String flat = r.service == null ? "default" : r.service.flattenToString();
+            prefs.edit().putString(KEY_ROUTE + requestedLanguage, flat).apply();
+        }
+
+        @Override
+        public boolean requestLanguageDownload() {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || recognizer == null) return false;
+            recognizer.triggerModelDownload(buildIntent());
             return true;
         }
 

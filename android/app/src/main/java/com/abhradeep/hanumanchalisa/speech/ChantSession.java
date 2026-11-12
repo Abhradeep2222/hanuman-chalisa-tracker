@@ -54,14 +54,29 @@ public final class ChantSession {
         /** Drop the recogniser instance; the next start() creates a fresh one. */
         void destroy();
 
-        /** Move to the next route (dropping the current instance). False when none is left. */
-        boolean fallBack();
+        /**
+         * Move to the next route (dropping the current instance). With
+         * {@code sameLanguage} only a route in the current language qualifies:
+         * a recogniser that is merely failing must never push the chant into
+         * another language (English output garbles Awadhi words).
+         * False when no route qualifies.
+         */
+        boolean fallBack(boolean sameLanguage);
 
         /** Language of the current route, e.g. "bn-IN". */
         String language();
 
         /** Recognition service of the current route (package name, or "default"). */
         String service();
+
+        /** The current route recognised speech: remember it for the next session. */
+        void proven();
+
+        /**
+         * The current route's language is supported but not installed (e.g. no
+         * offline Hindi pack). Ask the service to download it. True if requested.
+         */
+        boolean requestLanguageDownload();
     }
 
     public interface Events {
@@ -73,7 +88,7 @@ public final class ChantSession {
 
         void onState(boolean listening, String reason);
 
-        /** Switched to another route; reason "language" (not available) or "failing". */
+        /** Route news; reason "language" / "failing" (switched) or "working" (recognised speech). */
         void onRoute(String language, String service, String reason);
     }
 
@@ -99,7 +114,7 @@ public final class ChantSession {
         /** Consecutive network failures before the web layer is told (non-fatal). */
         public int networkNoticeAfter = 2;
         /** Failures on a route that never recognised anything before trying the next route. */
-        public int routeFailuresBeforeFallback = 3;
+        public int routeFailuresBeforeFallback = 4;
     }
 
     private enum Kind { SILENCE, RETRY, RECREATE, PERMISSION, LANGUAGE }
@@ -123,6 +138,7 @@ public final class ChantSession {
     private boolean routeProven; // the current route has recognised speech
     private int routeFailures;
     private int attemptsStarted;
+    private final java.util.TreeMap<Integer, Integer> errorCounts = new java.util.TreeMap<>();
     private Object restartTimer;
     private Object stallTimer;
 
@@ -187,6 +203,16 @@ public final class ChantSession {
         return running && !paused;
     }
 
+    /** Recogniser error codes seen this session, e.g. "7x5 8x1", for the diagnostics line. */
+    public String errorSummary() {
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<Integer, Integer> e : errorCounts.entrySet()) {
+            if (sb.length() > 0) sb.append(' ');
+            sb.append(e.getKey()).append('x').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
     public int attemptsStarted() {
         return attemptsStarted;
     }
@@ -221,8 +247,15 @@ public final class ChantSession {
         if (t.isEmpty() || t.equals(lastPartial)) return;
         lastPartial = t;
         errorStreak = 0;
-        routeProven = true;
+        markProven();
         events.onPartial(segment, t);
+    }
+
+    private void markProven() {
+        if (routeProven) return;
+        routeProven = true;
+        quietly(recognizer::proven);
+        events.onRoute(recognizer.language(), recognizer.service(), "working");
     }
 
     public void onEndOfSpeech(int a) {
@@ -235,13 +268,14 @@ public final class ChantSession {
         if (!current(a)) return;
         String t = clean(text);
         if (!t.isEmpty() || micReady) errorStreak = 0;
-        if (!t.isEmpty()) routeProven = true;
+        if (!t.isEmpty()) markProven();
         closeAttempt(t.isEmpty() ? lastPartial : t);
         scheduleRestart(timing.restartDelayMs);
     }
 
     public void onError(int a, int code) {
         if (!current(a)) return;
+        errorCounts.merge(code, 1, Integer::sum);
         closeAttempt(lastPartial);
         switch (classify(code)) {
             case SILENCE:
@@ -256,9 +290,20 @@ public final class ChantSession {
                 fail("permission", "Microphone permission was revoked.");
                 return;
             case LANGUAGE:
-                // e.g. Samsung's default recogniser has no Bengali: try the next service / language
+                // e.g. Samsung's default recogniser has no Bengali, or the Hindi
+                // offline pack is not downloaded: request the pack for next time,
+                // then try the next service / language now.
+                if (code == ERROR_LANGUAGE_UNAVAILABLE) {
+                    boolean requested;
+                    try {
+                        requested = recognizer.requestLanguageDownload();
+                    } catch (RuntimeException e) {
+                        requested = false;
+                    }
+                    if (requested) events.onError("download", recognizer.language(), false);
+                }
                 quietly(recognizer::destroy);
-                if (switchRoute("language")) return;
+                if (switchRoute("language", false)) return;
                 fail("language", "Speech recognition for this language is not available on this phone.");
                 return;
             case RECREATE:
@@ -350,7 +395,7 @@ public final class ChantSession {
     private void failSoft(int code) {
         // A route that has never recognised anything and keeps failing is probably
         // unusable on this phone (wrong service, missing language): try the next one.
-        if (!routeProven && ++routeFailures >= timing.routeFailuresBeforeFallback && switchRoute("failing")) return;
+        if (!routeProven && ++routeFailures >= timing.routeFailuresBeforeFallback && switchRoute("failing", true)) return;
         errorStreak++;
         if (errorStreak > timing.maxErrorStreak) {
             fail(codeName(code), "Speech recognition keeps failing (" + describe(code) + ").");
@@ -362,10 +407,10 @@ public final class ChantSession {
         scheduleRestart(backoff(errorStreak));
     }
 
-    private boolean switchRoute(String reason) {
+    private boolean switchRoute(String reason, boolean sameLanguage) {
         boolean moved;
         try {
-            moved = recognizer.fallBack();
+            moved = recognizer.fallBack(sameLanguage);
         } catch (RuntimeException e) {
             moved = false;
         }

@@ -124,6 +124,18 @@ function nativeSpeechPlugin() {
   return plugins && plugins.ChantRecognizer ? plugins.ChantRecognizer : null;
 }
 
+/** Human name of an Android recognition service package, for the diagnostics line. */
+function serviceLabel(pkg) {
+  const known = {
+    'com.google.android.googlequicksearchbox': 'Google app',
+    'com.google.android.tts': 'Google Speech Services',
+    'com.google.android.as': 'Android System Intelligence',
+    'com.samsung.android.bixby.agent': 'Samsung Bixby',
+    default: "phone's default recogniser"
+  };
+  return known[pkg] || pkg || 'unknown recogniser';
+}
+
 const MSG_MIC_PERMISSION = 'Microphone permission is off. Allow it in Android Settings → Apps → Shri Hanuman Chalisa → Permissions, then tap Start again.';
 
 function settle(fn) {
@@ -164,8 +176,13 @@ class HanumanChalisaEngine {
     this.audioDuration = 581;
     this.audioFailed = false;
 
-    // Speech alignment
-    this.tracker = new SpeechMatcher.RecitationTracker(CHALISA_DATA.verses);
+    // Speech alignment (with what it learned about this reciter's voice before)
+    let learned = null;
+    try { learned = JSON.parse(safeStorage.get('chalisa_voice_learning', 'null')); } catch (e) { learned = null; }
+    this.tracker = new SpeechMatcher.RecitationTracker(CHALISA_DATA.verses, { aliases: learned });
+    this.learningSaveTimer = null;
+    this.contextLineKey = null;
+    this.diagTimer = null;
     this.feed = new SpeechMatcher.TranscriptFeed();
     this.lineModel = new Map(this.tracker.lines.map(L => [`${L.verseIndex}-${L.lineIndex}`, L]));
 
@@ -291,12 +308,16 @@ class HanumanChalisaEngine {
       autoScrollToggle: document.getElementById('autoScrollToggle'),
       wakeLockToggle: document.getElementById('wakeLockToggle'),
       wakeLockDesc: document.getElementById('wakeLockDesc'),
+      voiceLearningDesc: document.getElementById('voiceLearningDesc'),
+      resetVoiceLearningBtn: document.getElementById('resetVoiceLearningBtn'),
+      voiceDiagnostics: document.getElementById('voiceDiagnostics'),
       resetAllDataBtn: document.getElementById('resetAllDataBtn')
     };
   }
 
   renderVerses() {
     document.body.setAttribute('data-lang', this.scriptLang);
+    this.applyBrandTitle();
     this.els.meaningBtnText.textContent = this.meaningLang === 'hi' ? 'अर्थ' : (this.meaningLang === 'bn' ? 'ভাবার্থ' : 'Meaning');
 
     let html = '';
@@ -355,7 +376,7 @@ class HanumanChalisaEngine {
     const nativeAwake = nativeSpeechPlugin();
     if (!('wakeLock' in navigator) && !(nativeAwake && typeof nativeAwake.keepAwake === 'function')) {
       this.els.wakeLockToggle.disabled = true;
-      if (this.els.wakeLockDesc) this.els.wakeLockDesc.textContent = 'Not supported by this browser / WebView';
+      if (this.els.wakeLockDesc) this.els.wakeLockDesc.textContent = 'This browser cannot keep the screen on.';
     }
     this.setPlaybackSpeed(this.playbackSpeed);
   }
@@ -477,12 +498,26 @@ class HanumanChalisaEngine {
     this.els.openSettingsBtn.addEventListener('click', () => {
       this.els.settingsModal.classList.add('open');
       this.els.settingsModal.setAttribute('aria-hidden', 'false');
+      this.refreshVoiceDiagnostics();
+      clearInterval(this.diagTimer);
+      this.diagTimer = setInterval(() => this.refreshVoiceDiagnostics(), 2000);
     });
 
     const closeSettings = () => {
       this.els.settingsModal.classList.remove('open');
       this.els.settingsModal.setAttribute('aria-hidden', 'true');
+      clearInterval(this.diagTimer);
+      this.diagTimer = null;
     };
+
+    if (this.els.resetVoiceLearningBtn) {
+      this.els.resetVoiceLearningBtn.addEventListener('click', () => {
+        if (!confirm('Forget what AI Voice Sync learned about your chanting?')) return;
+        this.tracker.importAliases(null);
+        safeStorage.set('chalisa_voice_learning', 'null');
+        this.refreshVoiceDiagnostics();
+      });
+    }
     this.els.closeSettingsBtn.addEventListener('click', closeSettings);
     this.els.settingsModal.addEventListener('click', (e) => {
       if (e.target === this.els.settingsModal) closeSettings();
@@ -939,7 +974,9 @@ class HanumanChalisaEngine {
     if (!this.isActiveSession(session)) return true;
     v.beepMuted = !!(started && started.beepMuted);
     v.requestedLang = lang;
+    if (started && started.service) v.service = started.service;
     if (!v.routeNotice) this.showVoiceStatus(this.listeningMessage(v.lang));
+    this.sendRecognitionContext(true);
     return true;
   }
 
@@ -1051,7 +1088,11 @@ class HanumanChalisaEngine {
     if (!this.isActiveSession(session) || !data || !data.language) return;
     const v = this.voice;
     const requested = v.requestedLang || v.lang;
+    const languageChanged = data.language !== v.lang;
     v.lang = data.language;
+    if (data.service) v.service = data.service;
+    if (languageChanged) this.sendRecognitionContext(true); // verse hints in the new script
+    if (data.reason === 'working' && !languageChanged) return; // good news needs no message
     if (data.language !== requested) {
       v.routeNotice = true;
       this.showVoiceStatus(`${LANG_NAMES[requested] || requested} speech recognition is not available on this phone, so AI Voice Sync is listening in ${LANG_NAMES[data.language] || data.language}. Chant as usual: your words still match the verses on screen.`);
@@ -1064,6 +1105,11 @@ class HanumanChalisaEngine {
     if (!this.isActiveSession(session) || !data) return;
     const lang = LANG_NAMES[this.voice.lang] || this.voice.lang || 'Hindi';
     if (!data.fatal) {
+      if (data.code === 'download') {
+        const pack = LANG_NAMES[data.message] || data.message || lang;
+        this.showToast(`Downloading the ${pack} speech pack for this phone (one time). AI Voice Sync will use it automatically.`);
+        return;
+      }
       if (data.code === 'network') {
         this.showVoiceStatus(`Cannot reach the speech service. Retrying… (With the offline ${lang} speech pack installed, chanting works without internet.)`);
       }
@@ -1274,6 +1320,8 @@ class HanumanChalisaEngine {
     if (v.restartTimer) clearTimeout(v.restartTimer);
     clearTimeout(v.holdTimer);
     clearTimeout(v.lineCloseTimer);
+    if (this.learningSaveTimer) this.saveLearningSoon(true);
+    this.contextLineKey = null;
     if (v.engine === 'native' && v.plugin) {
       settle(() => v.plugin.stop());
       settle(() => v.plugin.removeAllListeners());
@@ -1350,11 +1398,14 @@ class HanumanChalisaEngine {
         this.clearLineMarks(ev.verseIndex, ev.lineIndex);
       } else if (ev.type === 'complete') {
         completed = true;
+      } else if (ev.type === 'learn') {
+        this.saveLearningSoon();
       }
     }
     if (completed) {
       this.completeRecitation();
       this.highlightExpectedWord();
+      this.sendRecognitionContext();
       return;
     }
     const pos = this.tracker.position();
@@ -1364,6 +1415,71 @@ class HanumanChalisaEngine {
     this.currentWordIndex = pos.wordIndex;
     if (verseChanged) this.onVerseChanged();
     this.highlightExpectedWord();
+    this.sendRecognitionContext();
+  }
+
+  /** Persist what the tracker learned about this reciter's voice (debounced). */
+  saveLearningSoon(now = false) {
+    clearTimeout(this.learningSaveTimer);
+    const save = () => {
+      this.learningSaveTimer = null;
+      safeStorage.set('chalisa_voice_learning', JSON.stringify(this.tracker.exportAliases()));
+    };
+    if (now) save();
+    else this.learningSaveTimer = setTimeout(save, 1500);
+  }
+
+  /**
+   * Tell the native recogniser which verse text comes next. Android 13+
+   * recognisers bias their results toward these phrases, so the Chalisa's
+   * Awadhi words win over similar-sounding everyday words.
+   */
+  sendRecognitionContext(force = false) {
+    const v = this.voice;
+    if (!this.isVoiceListening || v.engine !== 'native' || !v.plugin || typeof v.plugin.setContext !== 'function') return;
+    const idx = this.tracker.lineIdx;
+    const key = `${idx}-${v.lang}`;
+    if (!force && key === this.contextLineKey) return;
+    this.contextLineKey = key;
+    const script = v.lang === 'bn-IN' ? 'bn' : v.lang === 'en-IN' ? 'en' : 'hi';
+    const phrases = [];
+    for (let k = idx; k < Math.min(this.tracker.lines.length, idx + 3); k++) {
+      const L = this.tracker.lines[k];
+      const line = CHALISA_DATA.verses[L.verseIndex].lines[L.lineIndex];
+      const text = String((line && (line[script] || line.hi)) || '').replace(/[।॥|]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (text) phrases.push(text);
+    }
+    // the distinctive words of the current and next line on their own, too
+    phrases.slice(0, 2).forEach(p => p.split(' ').forEach(w => {
+      if (w.length >= 3 && !phrases.includes(w)) phrases.push(w);
+    }));
+    settle(() => v.plugin.setContext({ phrases: phrases.slice(0, 40) }));
+  }
+
+  async refreshVoiceDiagnostics() {
+    const learnedWords = this.tracker.learnedWordCount();
+    if (this.els.voiceLearningDesc) {
+      this.els.voiceLearningDesc.textContent = learnedWords
+        ? `Learned how your chanting of ${learnedWords} word${learnedWords === 1 ? ' is' : 's are'} heard. Stored on this phone only.`
+        : 'Words the recogniser hears differently in your chanting are remembered on this phone only.';
+    }
+    const out = this.els.voiceDiagnostics;
+    if (!out) return;
+    const v = this.voice;
+    if (!this.isVoiceListening) {
+      out.textContent = 'Voice diagnostics: start AI Voice Sync to see the recogniser in use.';
+      return;
+    }
+    if (v.engine === 'native' && v.plugin && typeof v.plugin.getState === 'function') {
+      let s = null;
+      try { s = await v.plugin.getState(); } catch (e) { s = null; }
+      if (!s || !this.isVoiceListening) return;
+      out.textContent = `Voice diagnostics: ${serviceLabel(s.service)} · ${s.language || v.lang} · route ${s.route || '-'} · ${s.attempts || 0} listens · errors ${s.errors || 'none'} · beep ${s.beepMuted ? 'muted' : 'not muted'} · verse hints ${s.biasing ? 'on' : 'off'} · Android API ${s.sdk || '?'}`;
+    } else if (v.engine === 'web') {
+      out.textContent = `Voice diagnostics: browser speech recognition · ${v.lang}`;
+    } else if (v.engine === 'rhythm') {
+      out.textContent = 'Voice diagnostics: no speech recogniser available, rhythm mode';
+    }
   }
 
   highlightExpectedWord() {
@@ -1574,6 +1690,26 @@ class HanumanChalisaEngine {
 
   applyTheme() {
     document.body.setAttribute('data-theme', this.theme);
+    // Android: status-bar icons must contrast with the app's theme, not the phone's.
+    const cap = window.Capacitor;
+    const bars = isNativeApp() && cap.Plugins && cap.Plugins.SystemBars;
+    if (bars && typeof bars.setStyle === 'function') {
+      settle(() => bars.setStyle({ style: this.theme === 'dark' ? 'DARK' : 'LIGHT' }));
+    }
+  }
+
+  /** The title in the script being read. */
+  applyBrandTitle() {
+    const titles = {
+      hi: ['श्री हनुमान चालीसा', 'गोस्वामी तुलसीदास'],
+      bn: ['শ্রী হনুমান চালিসা', 'গোস্বামী তুলসীদাস'],
+      en: ['Shri Hanuman Chalisa', 'Goswami Tulsidas']
+    };
+    const [title, sub] = titles[this.scriptLang] || titles.hi;
+    const t = document.getElementById('brandTitle');
+    const s = document.getElementById('brandSub');
+    if (t) { t.textContent = title; t.setAttribute('lang', this.scriptLang); }
+    if (s) { s.textContent = sub; s.setAttribute('lang', this.scriptLang); }
   }
 
   applyFontSize() {

@@ -70,7 +70,7 @@ final class Fakes {
         }
     }
 
-    static final class Volume implements BeepGuard.Volume {
+    static class Volume implements BeepGuard.Volume {
 
         final Map<Integer, Boolean> muted = new HashMap<>();
         final List<String> calls = new ArrayList<>();
@@ -132,12 +132,32 @@ final class Fakes {
             return routes.get(route);
         }
 
+        int proven;
+        boolean downloadSupported;
+        final List<String> downloads = new ArrayList<>();
+
         @Override
-        public boolean fallBack() {
-            if (route + 1 >= routes.size()) return false;
-            calls.add("destroy");
-            route++;
-            calls.add("route:" + currentRoute());
+        public boolean fallBack(boolean sameLanguage) {
+            for (int i = route + 1; i < routes.size(); i++) {
+                if (!sameLanguage || routes.get(i).split("/")[1].equals(language())) {
+                    calls.add("destroy");
+                    route = i;
+                    calls.add("route:" + currentRoute());
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        public void proven() {
+            proven++;
+        }
+
+        @Override
+        public boolean requestLanguageDownload() {
+            if (!downloadSupported) return false;
+            downloads.add(language());
             return true;
         }
 

@@ -6,7 +6,9 @@
 function fakeChantRecognizer({ permission = 'granted', initial = 'prompt', available = true, startError = null } = {}) {
   const listeners = {};
   const plugin = {
-    starts: [], stops: 0, permissionRequests: [], awake: [],
+    starts: [], stops: 0, permissionRequests: [], awake: [], contexts: [],
+    setContext: async ({ phrases }) => { plugin.contexts.push(phrases); },
+    getState: async () => ({ listening: true, service: 'com.google.android.googlequicksearchbox', language: 'hi-IN', route: '1/6', attempts: 3, errors: '7x2', beepMuted: true, biasing: true, sdk: 34 }),
     available: async () => ({ available }),
     checkPermissions: async () => ({ microphone: permission === 'granted' && initial === 'granted' ? 'granted' : initial }),
     requestPermissions: async (opts) => { plugin.permissionRequests.push(opts); return { microphone: permission }; },
