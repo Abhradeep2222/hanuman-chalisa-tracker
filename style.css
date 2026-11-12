@@ -1976,11 +1976,15 @@ body {
   background: var(--sindoor-deep);
 }
 
-.setting-item-stack .pill-option {
+#resetVoiceLearningBtn {
   flex-shrink: 0;
   border: 1px solid var(--border-gold);
   color: var(--gold-bright);
   padding: 6px 14px;
+}
+
+.toggle-switch {
+  flex-shrink: 0;
 }
 
 .voice-diagnostics {
@@ -2035,4 +2039,150 @@ button,
 input,
 select {
   font-family: inherit;
+}
+
+/* ==================== 12. Jap counter, custom goal, voice settings ==================== */
+
+/* docked in the bottom bar, raised above its edge: always in thumb reach,
+   never covering a verse */
+.jap-counter-fab {
+  position: relative;
+  flex-shrink: 0;
+  margin-top: -26px;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  color: var(--text-pure);
+  /* the ring fills as the japs add up */
+  background:
+    radial-gradient(closest-side, var(--bg-elevated) 84%, transparent 85%),
+    conic-gradient(var(--accent-fill) var(--jap-progress, 0%), var(--surface-2) 0);
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border-gold);
+  transition: transform 0.12s ease;
+}
+
+[data-theme="light"] .jap-counter-fab {
+  box-shadow: 0 12px 26px -14px rgba(90, 40, 10, 0.55), 0 0 0 1px var(--border-gold);
+}
+
+.jap-counter-fab[hidden] {
+  display: none;
+}
+
+.jap-counter-fab:active {
+  transform: scale(0.93);
+}
+
+.jap-counter-fab.done {
+  box-shadow: 0 0 0 2px var(--gold-bright), 0 14px 32px -10px rgba(244, 162, 58, 0.75);
+}
+
+.jap-count {
+  font-family: var(--font-sans);
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.jap-goal {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* keep the last verse and the toasts clear of the raised counter */
+body.has-jap-counter {
+  padding-bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+}
+
+body.has-jap-counter .app-toast {
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+
+.app-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toast-action {
+  flex-shrink: 0;
+  border: 1px solid var(--border-gold-bright);
+  background: transparent;
+  color: var(--gold-bright);
+  font-weight: 700;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.toast-action[hidden] {
+  display: none;
+}
+
+.sankalpa-options {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
+.custom-goal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 100%;
+  margin-top: 6px;
+}
+
+.custom-goal-row[hidden] {
+  display: none;
+}
+
+.custom-goal-row label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.custom-goal-row input,
+.setting-select {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  color: var(--text-pure);
+  background: var(--surface-2);
+  border: 1px solid var(--border-gold);
+  border-radius: 12px;
+  padding: 6px 12px;
+  min-height: 40px;
+}
+
+.custom-goal-row input {
+  width: 96px;
+  font-variant-numeric: tabular-nums;
+}
+
+.setting-select {
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 220px;
+}
+
+.setting-item-stack {
+  flex-wrap: wrap;
+  row-gap: 8px;
 }

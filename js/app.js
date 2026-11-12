@@ -127,6 +127,7 @@ function nativeSpeechPlugin() {
 /** Human name of an Android recognition service package, for the diagnostics line. */
 function serviceLabel(pkg) {
   const known = {
+    'on-device': 'On-device recogniser (offline)',
     'com.google.android.googlequicksearchbox': 'Google app',
     'com.google.android.tts': 'Google Speech Services',
     'com.google.android.as': 'Android System Intelligence',
@@ -159,6 +160,9 @@ class HanumanChalisaEngine {
     this.chantCount = storedInt('chalisa_chant_count', 0, 1e7, 0);
     this.isLooping = safeStorage.get('chalisa_loop', 'false') === 'true';
     this.keepAwake = safeStorage.get('chalisa_wakelock', 'true') === 'true';
+    this.voiceEngine = storedChoice('chalisa_voice_engine', ['ondevice', 'system'], 'ondevice');
+    this.micDeviceId = safeStorage.get('chalisa_mic', '');
+    this.japCounterOn = safeStorage.get('chalisa_jap_counter', 'true') === 'true';
 
     // Position (wordIndex counts words, not punctuation tokens like "|")
     this.currentVerseIndex = 0;
@@ -193,6 +197,7 @@ class HanumanChalisaEngine {
     this.voiceTiming = {
       webRestartDelay: 250,
       holdReleaseMs: 800,        // a word the recogniser stopped revising counts without waiting for the next
+      offlineHoldReleaseMs: 350, // the on-device engine revises far less: light words up sooner
       lineCloseSilenceMs: 5000,  // silence that closes a line whose last word was never recognised
       quietHintMs: 7000          // window for the "voice is very soft" hint
     };
@@ -311,6 +316,15 @@ class HanumanChalisaEngine {
       voiceLearningDesc: document.getElementById('voiceLearningDesc'),
       resetVoiceLearningBtn: document.getElementById('resetVoiceLearningBtn'),
       voiceDiagnostics: document.getElementById('voiceDiagnostics'),
+      japCounterBtn: document.getElementById('japCounterBtn'),
+      japCountText: document.getElementById('japCountText'),
+      japGoalText: document.getElementById('japGoalText'),
+      japCounterToggle: document.getElementById('japCounterToggle'),
+      customGoalPill: document.getElementById('customGoalPill'),
+      customGoalRow: document.getElementById('customGoalRow'),
+      customGoalInput: document.getElementById('customGoalInput'),
+      engineBtns: document.querySelectorAll('[data-engine]'),
+      micSelect: document.getElementById('micSelect'),
       resetAllDataBtn: document.getElementById('resetAllDataBtn')
     };
   }
@@ -368,7 +382,10 @@ class HanumanChalisaEngine {
     this.els.langBtns.forEach(b => b.classList.toggle('active', b.dataset.lang === this.scriptLang));
     this.els.meaningLangBtns.forEach(b => b.classList.toggle('active', b.dataset.mlang === this.meaningLang));
     this.els.toggleMeaningBtn.classList.toggle('active', this.showMeaning);
-    this.els.goalPills.forEach(p => p.classList.toggle('active', parseInt(p.dataset.goal, 10) === this.sankalpaGoal));
+    this.syncGoalPills();
+    if (this.els.japCounterToggle) this.els.japCounterToggle.checked = this.japCounterOn;
+    this.els.engineBtns.forEach(b => b.classList.toggle('active', b.dataset.engine === this.voiceEngine));
+    this.applyJapCounter();
     this.els.loopAudioBtn.classList.toggle('active', this.isLooping);
     this.els.loopLabel.textContent = this.isLooping ? 'Loop: ON' : 'Loop: 1x';
     this.els.autoScrollToggle.checked = this.autoScroll;
@@ -499,6 +516,7 @@ class HanumanChalisaEngine {
       this.els.settingsModal.classList.add('open');
       this.els.settingsModal.setAttribute('aria-hidden', 'false');
       this.refreshVoiceDiagnostics();
+      this.refreshMicrophones();
       clearInterval(this.diagTimer);
       this.diagTimer = setInterval(() => this.refreshVoiceDiagnostics(), 2000);
     });
@@ -552,6 +570,73 @@ class HanumanChalisaEngine {
     });
     document.addEventListener('visibilitychange', () => this.updateWakeLock());
 
+    // Jap counter: tap = one jap, long-press = take one back
+    if (this.els.japCounterBtn) {
+      let pressTimer = null;
+      let longPressed = false;
+      const btn = this.els.japCounterBtn;
+      btn.addEventListener('pointerdown', () => {
+        longPressed = false;
+        clearTimeout(pressTimer);
+        pressTimer = setTimeout(() => { longPressed = true; this.undoJap(); }, 650);
+      });
+      const cancel = () => clearTimeout(pressTimer);
+      btn.addEventListener('pointerup', cancel);
+      btn.addEventListener('pointerleave', cancel);
+      btn.addEventListener('pointercancel', cancel);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (longPressed) { longPressed = false; return; }
+        this.countJap();
+      });
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+    }
+    if (this.els.japCounterToggle) {
+      this.els.japCounterToggle.addEventListener('change', (e) => {
+        this.japCounterOn = e.target.checked;
+        safeStorage.set('chalisa_jap_counter', String(this.japCounterOn));
+        this.applyJapCounter();
+      });
+    }
+    if (this.els.customGoalPill && this.els.customGoalRow) {
+      this.els.customGoalPill.addEventListener('click', () => {
+        const row = this.els.customGoalRow;
+        row.hidden = !row.hidden;
+        this.els.customGoalPill.setAttribute('aria-expanded', String(!row.hidden));
+        if (!row.hidden) {
+          this.els.customGoalInput.value = String(this.sankalpaGoal);
+          try { this.els.customGoalInput.focus(); this.els.customGoalInput.select(); } catch (e) {}
+        }
+      });
+      this.els.customGoalRow.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const n = parseInt(this.els.customGoalInput.value, 10);
+        if (!Number.isFinite(n) || n < 1 || n > 1008) {
+          this.showToast('Choose a goal from 1 to 1008.');
+          return;
+        }
+        this.setGoal(n);
+        this.els.customGoalRow.hidden = true;
+        this.els.customGoalPill.setAttribute('aria-expanded', 'false');
+        this.showToast(`Goal set: ${n} jap${n === 1 ? '' : 's'}.`);
+      });
+    }
+    this.els.engineBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        this.voiceEngine = e.currentTarget.dataset.engine;
+        safeStorage.set('chalisa_voice_engine', this.voiceEngine);
+        this.els.engineBtns.forEach(b => b.classList.toggle('active', b === e.currentTarget));
+        if (this.isVoiceListening) this.restartVoiceListening();
+      });
+    });
+    if (this.els.micSelect) {
+      this.els.micSelect.addEventListener('change', (e) => {
+        this.micDeviceId = e.target.value;
+        safeStorage.set('chalisa_mic', this.micDeviceId);
+        if (this.isVoiceListening) this.restartVoiceListening();
+      });
+    }
+
     this.els.resetAllDataBtn.addEventListener('click', () => {
       if (confirm('Do you want to reset your chanting recitations and accuracy scores?')) {
         this.chantCount = 0;
@@ -565,12 +650,10 @@ class HanumanChalisaEngine {
     });
 
     this.els.goalPills.forEach(pill => {
+      if (!pill.dataset.goal) return; // "Other" opens the custom goal field
       pill.addEventListener('click', (e) => {
-        const goal = parseInt(e.currentTarget.dataset.goal, 10);
-        this.els.goalPills.forEach(p => p.classList.toggle('active', p === e.currentTarget));
-        this.sankalpaGoal = goal;
-        safeStorage.set('chalisa_sankalpa_goal', goal.toString());
-        this.updateStatsDisplay();
+        this.setGoal(parseInt(e.currentTarget.dataset.goal, 10));
+        if (this.els.customGoalRow) this.els.customGoalRow.hidden = true;
       });
     });
 
@@ -761,16 +844,68 @@ class HanumanChalisaEngine {
     this.jumpToVerse(0);
   }
 
-  countRecitation() {
+  setGoal(goal) {
+    this.sankalpaGoal = goal;
+    safeStorage.set('chalisa_sankalpa_goal', String(goal));
+    this.syncGoalPills();
+    this.updateStatsDisplay();
+  }
+
+  syncGoalPills() {
+    let preset = false;
+    this.els.goalPills.forEach(p => {
+      const on = !!p.dataset.goal && parseInt(p.dataset.goal, 10) === this.sankalpaGoal;
+      preset = preset || on;
+      p.classList.toggle('active', on);
+    });
+    if (this.els.customGoalPill) {
+      this.els.customGoalPill.classList.toggle('active', !preset);
+      this.els.customGoalPill.textContent = preset ? 'Other' : `${this.sankalpaGoal}x`;
+    }
+  }
+
+  applyJapCounter() {
+    const btn = this.els.japCounterBtn;
+    if (!btn) return;
+    btn.hidden = !this.japCounterOn;
+    document.body.classList.toggle('has-jap-counter', this.japCounterOn);
+    this.els.japCountText.textContent = String(this.chantCount);
+    this.els.japGoalText.textContent = `of ${this.sankalpaGoal}`;
+    const pct = Math.min(100, Math.round((this.chantCount / Math.max(1, this.sankalpaGoal)) * 100));
+    btn.style.setProperty('--jap-progress', `${pct}%`);
+    btn.classList.toggle('done', this.chantCount >= this.sankalpaGoal);
+    btn.setAttribute('aria-label', `Count one jap. ${this.chantCount} of ${this.sankalpaGoal} done. Long-press to take one back.`);
+  }
+
+  /** One jap counted by hand (the counter button). */
+  countJap() {
+    getSharedAudioContext();
+    this.playDivineChime();
+    if (navigator.vibrate) { try { navigator.vibrate(30); } catch (e) {} }
+    this.countRecitation(true);
+  }
+
+  undoJap() {
+    if (this.chantCount <= 0) return;
+    this.chantCount--;
+    safeStorage.set('chalisa_chant_count', String(this.chantCount));
+    if (navigator.vibrate) { try { navigator.vibrate([20, 40, 20]); } catch (e) {} }
+    this.updateStatsDisplay();
+    this.showToast(`Taken back: ${this.chantCount} of ${this.sankalpaGoal}.`);
+  }
+
+  countRecitation(byHand = false) {
     this.chantCount++;
     safeStorage.set('chalisa_chant_count', this.chantCount.toString());
     this.updateStatsDisplay();
 
+    const undo = byHand ? { label: 'Undo', run: () => this.undoJap() } : null;
     if (this.chantCount === this.sankalpaGoal) {
       this.playSacredVictoryChime();
-      this.showToast(`🎉 Sacred Sankalpa complete: ${this.chantCount} recitation${this.chantCount > 1 ? 's' : ''} of Shri Hanuman Chalisa. Jai Shri Ram!`);
+      this.showToast(`Sankalpa complete: ${this.chantCount} recitation${this.chantCount > 1 ? 's' : ''} of Shri Hanuman Chalisa. Jai Shri Ram!`, undo);
     } else {
-      this.showToast(`📿 Recitation ${this.chantCount} complete${this.chantCount < this.sankalpaGoal ? ` • ${this.sankalpaGoal - this.chantCount} to go` : ''}`);
+      const left = this.sankalpaGoal - this.chantCount;
+      this.showToast(`Jap ${this.chantCount} counted${left > 0 ? `, ${left} to go` : ''}.`, undo);
     }
   }
 
@@ -885,12 +1020,24 @@ class HanumanChalisaEngine {
 
       this.isVoiceListening = true;
       this.feed.reset();
-      this.tracker.setPosition(this.currentVerseIndex, this.currentLineIndex);
-      this.currentWordIndex = 0;
+      const at = this.tracker.position();
+      if (at.verseIndex !== this.currentVerseIndex || at.lineIndex !== this.currentLineIndex || at.done) {
+        this.tracker.setPosition(this.currentVerseIndex, this.currentLineIndex);
+        this.currentWordIndex = 0;
+      } else {
+        // Resume after a pause: go on from the very word the chant stopped at.
+        this.tracker.pending = [];
+        this.tracker.lost = 0;
+        this.tracker.tentative = null;
+        this.currentWordIndex = at.wordIndex;
+      }
       this.setVoiceUi(true);
       this.highlightExpectedWord();
 
       const lang = this.getRecognitionLang();
+      const offline = this.voiceEngine === 'ondevice' ? this.offlineEngine() : null;
+      if (offline && await this.startNativeRecognition(offline, lang, session, true)) return;
+      if (!this.isActiveSession(session)) return;
       const plugin = nativeSpeechPlugin();
       if (plugin && await this.startNativeRecognition(plugin, lang, session)) return;
       if (!this.isActiveSession(session)) return;
@@ -923,7 +1070,15 @@ class HanumanChalisaEngine {
 
   // ---------- 1. Native Android recogniser ----------
 
-  async startNativeRecognition(plugin, lang, session) {
+  /** The on-device recogniser (js/offline-engine.js), attached to this tracker. */
+  offlineEngine() {
+    const engine = typeof window.getOfflineChantEngine === 'function' ? window.getOfflineChantEngine() : null;
+    if (!engine || typeof window.offlineLexiconForms !== 'function') return null;
+    engine.attach({ tracker: this.tracker, lexicon: window.offlineLexiconForms, deviceId: this.micDeviceId });
+    return engine;
+  }
+
+  async startNativeRecognition(plugin, lang, session, offline = false) {
     let available = false;
     try {
       available = !!(await plugin.available()).available;
@@ -945,6 +1100,7 @@ class HanumanChalisaEngine {
 
     const v = this.voice;
     v.engine = 'native';
+    v.offline = offline;
     v.plugin = plugin;
     v.lang = lang;
     await settle(() => plugin.removeAllListeners());
@@ -962,12 +1118,14 @@ class HanumanChalisaEngine {
     } catch (err) {
       if (!this.isActiveSession(session)) return true;
       if (err && err.code === 'permission') {
-        this.stopVoiceListening(MSG_MIC_PERMISSION);
+        this.stopVoiceListening(isNativeApp() ? MSG_MIC_PERMISSION : 'Microphone access was denied. Allow the microphone for this site and tap Start again.');
         return true;
       }
       // No usable recogniser after all: let the next engine take over.
+      if (offline) console.warn('On-device recogniser unavailable, using the speech service:', err);
       await settle(() => plugin.removeAllListeners());
       v.engine = null;
+      v.offline = false;
       v.plugin = null;
       return false;
     }
@@ -1059,7 +1217,7 @@ class HanumanChalisaEngine {
       v.holdTimer = null;
       if (!this.isActiveSession(session)) return;
       this.processHeardWords(key ? this.feed.flush(key) : this.feed.flushAll());
-    }, this.voiceTiming.holdReleaseMs);
+    }, v.offline ? this.voiceTiming.offlineHoldReleaseMs : this.voiceTiming.holdReleaseMs);
   }
 
   /**
@@ -1126,7 +1284,9 @@ class HanumanChalisaEngine {
 
   onNativeState(session, data) {
     if (!this.isActiveSession(session) || !data) return;
-    if (data.reason === 'background') {
+    if (data.reason === 'loading') {
+      this.showVoiceStatus('Preparing the on-device recogniser… The first time takes a few seconds.');
+    } else if (data.reason === 'background') {
       this.showVoiceStatus('Paused while the app is in the background. It resumes when you come back.');
     } else if (data.reason === 'resumed') {
       this.showVoiceStatus(this.listeningMessage(this.voice.lang));
@@ -1358,7 +1518,8 @@ class HanumanChalisaEngine {
 
   setVoiceUi(on) {
     this.els.toggleVoiceBtn.classList.toggle('recording', on);
-    this.els.voiceBtnText.textContent = on ? 'Stop AI Voice Sync' : 'Start AI Voice Sync';
+    const resumable = !on && this.tracker && this.tracker.position().wordIndex > 0;
+    this.els.voiceBtnText.textContent = on ? 'Pause' : (resumable ? 'Resume chanting' : 'Start AI Voice Sync');
     this.els.voiceWaveBars.classList.toggle('active', on);
     this.els.hudStatusDot.classList.toggle('pulsing', on);
     this.els.hudStatusLabel.textContent = on ? 'Listening Voice...' : 'Voice Paused';
@@ -1398,6 +1559,8 @@ class HanumanChalisaEngine {
         this.clearLineMarks(ev.verseIndex, ev.lineIndex);
       } else if (ev.type === 'complete') {
         completed = true;
+      } else if (ev.type === 'jump') {
+        this.clearLineMarks(ev.verseIndex, ev.lineIndex);
       } else if (ev.type === 'learn') {
         this.saveLearningSoon();
       }
@@ -1474,7 +1637,9 @@ class HanumanChalisaEngine {
       let s = null;
       try { s = await v.plugin.getState(); } catch (e) { s = null; }
       if (!s || !this.isVoiceListening) return;
-      out.textContent = `Voice diagnostics: ${serviceLabel(s.service)} · ${s.language || v.lang} · route ${s.route || '-'} · ${s.attempts || 0} listens · errors ${s.errors || 'none'} · beep ${s.beepMuted ? 'muted' : 'not muted'} · verse hints ${s.biasing ? 'on' : 'off'} · Android API ${s.sdk || '?'}`;
+      out.textContent = v.offline
+        ? `Voice diagnostics: ${serviceLabel(s.service)} · Hindi · listening for ${s.route} · ${s.attempts || 0} vocabulary updates · errors ${s.errors || 'none'} · mic: ${s.mic || 'default'}`
+        : `Voice diagnostics: ${serviceLabel(s.service)} · ${s.language || v.lang} · route ${s.route || '-'} · ${s.attempts || 0} listens · errors ${s.errors || 'none'} · beep ${s.beepMuted ? 'muted' : 'not muted'} · verse hints ${s.biasing ? 'on' : 'off'} · Android API ${s.sdk || '?'}`;
     } else if (v.engine === 'web') {
       out.textContent = `Voice diagnostics: browser speech recognition · ${v.lang}`;
     } else if (v.engine === 'rhythm') {
@@ -1489,6 +1654,11 @@ class HanumanChalisaEngine {
   }
 
   recordLineAccuracy(vIdx, lIdx, matched, total) {
+    const previous = this.verseScores.has(vIdx) && this.verseScores.get(vIdx).get(lIdx);
+    if (previous) { // chanted again after going back: the new score replaces the old one
+      this.accuracy.matched -= previous.matched;
+      this.accuracy.total -= previous.total;
+    }
     this.accuracy.matched += matched;
     this.accuracy.total += total;
     if (!this.verseScores.has(vIdx)) this.verseScores.set(vIdx, new Map());
@@ -1610,6 +1780,7 @@ class HanumanChalisaEngine {
   updateStatsDisplay() {
     this.els.chantCountDisplay.textContent = this.chantCount;
     this.els.statGoalTag.textContent = `/ ${this.sankalpaGoal}x`;
+    this.applyJapCounter();
 
     const progressPct = Math.min(100, Math.round((this.chantCount / this.sankalpaGoal) * 100));
     this.els.sankalpaProgressFill.style.width = `${progressPct}%`;
@@ -1673,19 +1844,55 @@ class HanumanChalisaEngine {
     }
   }
 
-  showToast(message) {
+  showToast(message, action = null) {
     if (!this.toastEl) {
       const el = document.createElement('div');
       el.className = 'app-toast';
       el.setAttribute('role', 'status');
       el.setAttribute('aria-live', 'polite');
+      const text = document.createElement('span');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'toast-action';
+      btn.hidden = true;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const run = this.toastAction;
+        this.toastAction = null;
+        this.toastEl.classList.remove('show');
+        if (run) run();
+      });
+      el.appendChild(text);
+      el.appendChild(btn);
       document.body.appendChild(el);
       this.toastEl = el;
+      this.toastText = text;
+      this.toastBtn = btn;
     }
-    this.toastEl.textContent = message;
+    this.toastText.textContent = message;
+    this.toastAction = action ? action.run : null;
+    this.toastBtn.hidden = !action;
+    if (action) this.toastBtn.textContent = action.label;
     this.toastEl.classList.add('show');
     clearTimeout(this.toastTimer);
-    this.toastTimer = setTimeout(() => this.toastEl.classList.remove('show'), 4500);
+    this.toastTimer = setTimeout(() => { this.toastEl.classList.remove('show'); this.toastAction = null; }, action ? 6000 : 4500);
+  }
+
+  /** Microphones for the Settings list (names are known once the mic was allowed). */
+  async refreshMicrophones() {
+    const sel = this.els.micSelect;
+    if (!sel || !(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)) return;
+    let devices = [];
+    try { devices = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput'); } catch (e) { devices = []; }
+    while (sel.options.length > 1) sel.remove(1);
+    devices.forEach((d, i) => {
+      if (!d.deviceId || d.deviceId === 'default' || d.deviceId === 'communications') return;
+      const o = document.createElement('option');
+      o.value = d.deviceId;
+      o.textContent = d.label || `Microphone ${i + 1}`;
+      sel.appendChild(o);
+    });
+    sel.value = [...sel.options].some(o => o.value === this.micDeviceId) ? this.micDeviceId : '';
   }
 
   applyTheme() {

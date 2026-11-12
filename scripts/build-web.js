@@ -46,7 +46,7 @@ if (fs.existsSync(audioSrcDir)) {
 }
 
 // Copy bundled fonts and icons (the APK has no network for them)
-for (const dir of ['fonts', 'icons']) {
+for (const dir of ['fonts', 'icons', 'vendor', 'models']) {
   const src = path.join(root, dir);
   if (!fs.existsSync(src)) continue;
   const dest = path.join(dist, dir);

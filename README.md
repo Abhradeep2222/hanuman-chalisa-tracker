@@ -23,7 +23,7 @@
 
 ---
 
-## ✨ Features & Capabilities (v1.5.0)
+## ✨ Features & Capabilities (v1.6.0)
 
 ### 🎵 1. Soulful Devotional Audio & Radiant Word-by-Word Karaoke Sync
 - **Authentic Devotional Recitation:** Integrated iconic, melodious rendition of Shri Hanuman Chalisa by Hariharan Ji with sacred bells, shankh, and flute.
@@ -44,9 +44,11 @@
   - 🙏 **Shreshtha ★ (70% - 84%)**: Devoted seeker.
   - 📿 **Sadhak (< 70%)**: Chanting practice.
 - **Learns your voice:** when the recogniser keeps hearing one of your words differently, that form is remembered for that exact word (on the phone only; Settings → Forget clears it). On Android 13+ the current and next lines are sent to the recogniser as hints.
-- **Engines:** Android app → native Android speech recogniser through the app's own `ChantRecognizer` plugin. It restarts the recogniser instantly after every pause and keeps the system beeps muted while AI Voice Sync is on: media, notification and system sounds, restored on Stop, on leaving the app and after a crash. It stays in the chosen language when a recogniser fails, remembers the recogniser that worked, and asks Android to download a missing speech pack. Settings shows a voice diagnostics line. Browsers → Web Speech API (Chrome, Edge, Safari). With no recogniser available, **Rhythm mode** advances words on your chanting rhythm but does not score.
+- **On-device recogniser (default):** Vosk / Kaldi compiled to WebAssembly (`vendor/vosk.js`) with a small Hindi model trimmed for grammar-only use (`models/hindi-chant-v1.tar.gz`, 30 MB). It listens continuously, works offline, never beeps, and only for the Chalisa words around the reciter (`GrammarSession` in `js/speech-matcher.js`, model spellings in `js/offline-lexicon.js`). That is what lets it follow slow, fast, soft and paused chanting, going back and starting mid-way.
+- **Fallback engines:** Android app → native Android speech recogniser through the app's own `ChantRecognizer` plugin. It restarts the recogniser instantly after every pause and keeps the system beeps muted while AI Voice Sync is on: media, notification and system sounds, restored on Stop, on leaving the app and after a crash. It stays in the chosen language when a recogniser fails, remembers the recogniser that worked, and asks Android to download a missing speech pack. Settings shows a voice diagnostics line. Browsers → Web Speech API (Chrome, Edge, Safari). With no recogniser available, **Rhythm mode** advances words on your chanting rhythm but does not score.
 
-### 👆 3. Tap Sync (Mala Counter Mode)
+### 📿 3. Jap Counter & Tap Sync
+- **Jap counter button** in the bottom bar: tap once per jap, long-press or Undo to take one back; switch it off in Settings. Goals 1 / 7 / 11 / 21 / 108 or any number up to 1008.
 - **Silent & Meditative Chanting:** Tap anywhere on the mobile screen to advance word-by-word.
 - **Sacred Bell Chimes & Haptic Feedback:** Vibrates subtly (`navigator.vibrate`) with a resonant 528Hz bronze temple tone.
 

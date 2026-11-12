@@ -100,7 +100,7 @@
         const perScript = {};
         SCRIPTS.forEach(sc => {
           perScript[sc] = tokenize(line[sc])
-            .map((token, tokenIndex) => ({ tokenIndex, skel: phoneticSkeleton(token) }))
+            .map((token, tokenIndex) => ({ tokenIndex, token, skel: phoneticSkeleton(token) }))
             .filter(t => t.skel);
         });
         const count = Math.max(...SCRIPTS.map(sc => perScript[sc].length));
@@ -108,12 +108,14 @@
         for (let k = 0; k < count; k++) {
           const skelBy = {};
           const tokenIndex = {};
+          let text = '';
           SCRIPTS.forEach(sc => {
             const t = perScript[sc][k];
             if (t) { skelBy[sc] = t.skel; tokenIndex[sc] = t.tokenIndex; }
+            if (t && sc === 'hi') text = t.token.replace(/[।॥|]/g, '');
           });
           const keys = [...new Set(Object.values(skelBy))];
-          words.push({ keys, skelBy, tokenIndex, weak: keys.every(key => key.length <= 1) });
+          words.push({ keys, skelBy, tokenIndex, text, weak: keys.every(key => key.length <= 1) });
         }
         lines.push({ verseIndex, lineIndex, words });
       });
@@ -128,15 +130,32 @@
     return !!x && !!y && similarity(x, y) >= MATCH_THRESHOLD;
   }
 
-  /** Does `words` start like `ref` (a transcript that repeats it and goes on)? */
+  /** Longest in-order run of matching words (sounds compared, not spellings). */
+  function orderedOverlap(a, b) {
+    const prev = new Array(b.length + 1).fill(0);
+    for (let i = 1; i <= a.length; i++) {
+      let diag = 0;
+      for (let j = 1; j <= b.length; j++) {
+        const keep = prev[j];
+        prev[j] = sameWord(a[i - 1], b[j - 1]) ? diag + 1 : Math.max(prev[j], prev[j - 1]);
+        diag = keep;
+      }
+    }
+    return prev[b.length];
+  }
+
+  /**
+   * Does `words` continue `ref` (the same utterance, grown or revised: words
+   * inserted, merged or respelt) rather than start a new phrase?
+   */
   function startsLike(words, ref) {
     if (!ref.length || !words.length) return false;
-    const head = Math.min(3, words.length, ref.length);
-    let hits = 0;
-    for (let i = 0; i < head; i++) if (sameWord(words[i], ref[i])) hits++;
-    if (hits < Math.ceil((head * 2) / 3)) return false;
     // a cumulative transcript does not shrink to a fraction of what it already said
-    return words.join('').length >= ref.join('').length * 0.5;
+    if (words.join('').length < ref.join('').length * 0.5) return false;
+    const head = ref.slice(0, 8);
+    // the old words must sit at the start: at most two words inserted among them
+    const overlap = orderedOverlap(words.slice(0, head.length + 2), head);
+    return overlap >= Math.max(1, Math.ceil(head.length * 0.6));
   }
 
   function findWord(list, from, word, span) {
@@ -283,6 +302,69 @@
     }
   }
 
+  /**
+   * Words an offline grammar recogniser may output right now: the lines around
+   * the reciter (two back, for going back; three ahead) in the recogniser's
+   * own spellings (`lexicon(word)` -> forms it knows), or the whole Chalisa
+   * when the reciter is lost. A small vocabulary is what makes a modest
+   * on-device model reliable on chanting at any pace.
+   */
+  function grammarWords(tracker, lexicon, { back = 2, ahead = 3, global = false } = {}) {
+    const n = tracker.lines.length;
+    const from = global ? 0 : Math.max(0, tracker.lineIdx - back);
+    const to = global ? n - 1 : Math.min(n - 1, tracker.lineIdx + ahead);
+    const out = new Set();
+    for (let k = from; k <= to; k++) {
+      for (const w of tracker.lines[k].words) {
+        for (const form of lexicon(w.text)) form.split(/s+/).forEach(x => x && out.add(x));
+      }
+    }
+    return [...out].sort();
+  }
+
+  /**
+   * Drives a grammar-constrained recogniser (the on-device engine): which
+   * words it may hear now, and when to widen that to the whole Chalisa.
+   *  - tracking: the lines around the reciter;
+   *  - lost (the recogniser keeps answering "[unk]", or heard words cannot be
+   *    placed): every Chalisa word, until the tracker finds the reciter again.
+   */
+  class GrammarSession {
+    constructor(tracker, lexicon, options = {}) {
+      this.tracker = tracker;
+      this.lexicon = lexicon;
+      this.unknownLimit = options.unknownLimit || 3;
+      this.unknownRun = 0;
+      this.key = null;
+    }
+
+    /** Recogniser text without its "[unk]" markers; counts runs of unknown speech. */
+    clean(text, isFinal) {
+      const tokens = tokenize(text);
+      const words = tokens.filter(t => t !== '[unk]');
+      if (isFinal) this.unknownRun = words.length ? 0 : this.unknownRun + (tokens.length - words.length);
+      return words.join(' ');
+    }
+
+    get lost() {
+      return this.unknownRun >= this.unknownLimit || this.tracker.lost >= this.unknownLimit;
+    }
+
+    /** The word list to give the recogniser, or null when it has not changed. */
+    nextGrammar() {
+      const global = this.lost;
+      const key = global ? 'all' : String(this.tracker.lineIdx);
+      if (key === this.key) return null;
+      this.key = key;
+      return grammarWords(this.tracker, this.lexicon, { global }).concat('[unk]');
+    }
+
+    reset() {
+      this.unknownRun = 0;
+      this.key = null;
+    }
+  }
+
   class RecitationTracker {
     constructor(verses, options = {}) {
       this.lines = buildLineModel(verses);
@@ -316,6 +398,7 @@
       this.pending = [];
       this.lost = 0; // heard words in a row that could not be placed
       this.done = false;
+      this.tentative = null;
     }
 
     /**
@@ -327,7 +410,12 @@
      */
     endOfUtterance() {
       const events = [];
-      if (!this.done && this.pending.length >= 2) this.settlePending(events);
+      if (this.tentative) {
+        const t = this.tentative;
+        this.tentative = null;
+        this.commitTentative(t, events);
+      }
+      if (!this.done && this.pending.length >= 1) this.settlePending(events);
       const n = this.line.words.length;
       const isFinalLine = this.lineIdx === this.lines.length - 1;
       // The app calls this after a few seconds of silence, not at every pause.
@@ -364,7 +452,11 @@
           }
         }
       }
-      if (hits.length < 2 || hits.length * 2 < this.pending.length) return;
+      // A single held-back word is enough when it is this line's own last word:
+      // the reciter finished the line and stopped (see farClose in consume()).
+      const lastOfLine = hits.length === 1 && this.pending.length === 1 &&
+        hits[0].lineIdx === this.lineIdx && hits[0].q === this.line.words.length - 1;
+      if (!lastOfLine && (hits.length < 2 || hits.length * 2 < this.pending.length)) return;
       const byLine = new Map();
       for (const h of hits) {
         if (!byLine.has(h.lineIdx)) byLine.set(h.lineIdx, []);
@@ -374,6 +466,12 @@
         if (this.done) break;
         this.apply({ lineOffset: lineIdx - this.lineIdx, positions, usable: 0 }, events);
       }
+    }
+
+    /** Accept a held jump: its word is the last pending one. */
+    commitTentative(t, events) {
+      if (this.pending.length && this.pending[this.pending.length - 1] === t.skel) this.pending.pop();
+      this.apply({ lineOffset: 0, positions: t.positions, usable: this.pending.length }, events);
     }
 
     /** Feed heard words in spoken order. Returns the events they produced. */
@@ -393,7 +491,30 @@
 
     consume(skels, i, events) {
       const L = this.line;
-      const here = this.bestMatch(L, this.cursor, skels, i, this.lookahead, false);
+      // A held jump (below) is decided by the word after it.
+      if (this.tentative) {
+        const t = this.tentative;
+        this.tentative = null;
+        const behind = this.bestMatch(L, this.cursor, skels, i, Math.max(0, t.positions[0] - 1 - this.cursor), false);
+        if (behind && behind.positions[0] < t.positions[0]) {
+          // the skipped words are being chanted now: the held word was a stray guess
+        } else {
+          this.commitTentative(t, events);
+          if (this.done || this.line !== L) return 0; // re-read this word on the next line
+        }
+      }
+      const here = this.bestMatch(this.line, this.cursor, skels, i, this.lookahead, false);
+      // One word that skips two or more expected words ("जोजन" heard before
+      // "जुग सहस्र", "केसा" right after "सुबेसा") is held: the next word either
+      // continues after it (the skipped words really were not heard) or turns
+      // out to be one of the skipped words (the held word was a stray guess).
+      // Without this the highlight would run ahead and jump back.
+      if (here && here.positions[0] - this.cursor >= 2) {
+        this.tentative = { positions: here.positions, skel: skels[i] };
+        this.pending.push(skels[i]);
+        if (this.pending.length > PENDING_LIMIT) this.pending.shift();
+        return here.heardLen;
+      }
       if (here) {
         this.apply({ lineOffset: 0, positions: here.positions, usable: this.pending.length }, events);
         return here.heardLen;
@@ -411,6 +532,9 @@
       // Lost our place (several words in a row unrecognised)? Re-anchor on the
       // last few heard words if they line up with text further ahead.
       if (this.resync(skels[i], events)) return 1;
+      // Not ahead either: the reciter went back (repeating a line, resuming
+      // a verse from its start after a pause) or started somewhere else.
+      if (this.relocate(skels[i], events)) return 1;
       // Not (yet) placeable: filler, noise or a misrecognition. Keep it briefly
       // in case a later strong match shows it was a skipped expected word.
       this.pending.push(skels[i]);
@@ -475,7 +599,60 @@
       return true;
     }
 
-    alignStream(stream, start, heard) {
+    /**
+     * Find the reciter anywhere in the Chalisa: the last two unplaced heard
+     * words plus this one must match three upcoming words of some passage, in
+     * order, every one of them distinctive. Several places fit (refrains):
+     * the nearest wins. Used after a forward resync failed, so it is what
+     * lets the reciter go back a line, or start in the middle.
+     */
+    relocate(current, events) {
+      const tail = this.pending.slice(-(RESYNC_WINDOW - 1));
+      if (tail.length < RESYNC_WINDOW - 1) return false;
+      const heard = [...tail, current];
+      if (!this.allWords) {
+        this.allWords = [];
+        this.lines.forEach((L, lineIdx) => L.words.forEach((word, q) => this.allWords.push({ lineIdx, q, word })));
+      }
+      const here = this.lineIdx;
+      let best = null;
+      for (let s = 0; s < this.allWords.length; s++) {
+        const hits = this.alignStream(this.allWords, s, heard, true);
+        if (!hits) continue;
+        const target = hits[0].lineIdx;
+        if (target === here && hits[0].q >= this.cursor) continue; // ahead in this line: resync's job
+        const dist = Math.abs(target - here);
+        if (!best || dist < best.dist) best = { hits, dist };
+      }
+      if (!best) return false;
+      const from = this.position();
+      this.jumpTo(best.hits[0].lineIdx);
+      const L = this.line;
+      events.push({ type: 'jump', fromVerse: from.verseIndex, fromLine: from.lineIndex, verseIndex: L.verseIndex, lineIndex: L.lineIndex });
+      const byLine = new Map();
+      for (const h of best.hits) {
+        if (!byLine.has(h.lineIdx)) byLine.set(h.lineIdx, []);
+        byLine.get(h.lineIdx).push(h.q);
+      }
+      for (const [lineIdx, positions] of byLine) {
+        if (this.done) break;
+        this.apply({ lineOffset: lineIdx - this.lineIdx, positions, usable: 0 }, events);
+      }
+      return true;
+    }
+
+    /** Start over at a line (keeps learned forms; the line will be scored again). */
+    jumpTo(lineIdx) {
+      this.lineIdx = Math.max(0, Math.min(this.lines.length - 1, lineIdx));
+      this.cursor = 0;
+      this.status = new Array(this.line.words.length).fill(null);
+      this.pending = [];
+      this.lost = 0;
+      this.done = false;
+      this.tentative = null;
+    }
+
+    alignStream(stream, start, heard, allStrong = false) {
       const hits = [];
       let pos = start;
       let strong = 0;
@@ -499,7 +676,7 @@
       }
       // A soft voice loses more words, so two may be missing between matches,
       // but then every matched word must be distinctive.
-      const needed = wideGap ? heard.length : 2;
+      const needed = wideGap || allStrong ? heard.length : 2;
       return strong >= needed ? hits : null;
     }
 
@@ -595,6 +772,7 @@
       });
       this.pending = [];
       this.lost = 0;
+      this.tentative = null;
       if (this.cursor >= this.line.words.length) this.finishLine(events);
     }
 
@@ -697,6 +875,8 @@
   }
 
   return {
+    grammarWords,
+    GrammarSession,
     TranscriptFeed,
     RecitationTracker,
     buildLineModel,

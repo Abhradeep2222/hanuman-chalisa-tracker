@@ -256,7 +256,13 @@
                 <button class="goal-pill" data-goal="11">11x</button>
                 <button class="goal-pill" data-goal="21">21x</button>
                 <button class="goal-pill" data-goal="108">108x</button>
+                <button class="goal-pill goal-pill-other" id="customGoalPill" type="button" aria-expanded="false">Other</button>
             </div>
+            <form class="custom-goal-row" id="customGoalRow" hidden>
+                <label for="customGoalInput">How many times?</label>
+                <input type="number" id="customGoalInput" min="1" max="1008" inputmode="numeric" placeholder="e.g. 51">
+                <button type="submit" class="goal-pill active">Set goal</button>
+            </form>
         </section>
 
         <!-- Verses Recitation Container -->
@@ -279,6 +285,11 @@
             <div class="hud-center" id="hudTranscript">
                 Tap "Play Divine Audio" or "Start AI Voice Sync" to begin
             </div>
+            <!-- Jap counter: one tap per completed jap, long-press takes one back (Settings can hide it) -->
+            <button class="jap-counter-fab" id="japCounterBtn" type="button" aria-label="Count one jap">
+                <span class="jap-count" id="japCountText">0</span>
+                <span class="jap-goal" id="japGoalText">of 1</span>
+            </button>
             <button class="hud-quick-jump-btn" id="hudJumpBtn" title="Jump to Top">
                 ↑ Top
             </button>
@@ -348,6 +359,41 @@
                     </label>
                 </div>
 
+                <!-- AI Voice Sync recogniser -->
+                <div class="setting-item setting-item-stack">
+                    <div class="setting-info">
+                        <span class="setting-name">AI Voice Sync recogniser</span>
+                        <span class="setting-desc">On this phone works offline and never beeps. The speech service is the phone's own (Google), online.</span>
+                    </div>
+                    <div class="setting-controls pill-select-group" id="engineGroup">
+                        <button class="pill-option active" data-engine="ondevice" type="button">On this phone</button>
+                        <button class="pill-option" data-engine="system" type="button">Speech service</button>
+                    </div>
+                </div>
+
+                <!-- Microphone (headsets) -->
+                <div class="setting-item setting-item-stack">
+                    <div class="setting-info">
+                        <span class="setting-name">Microphone</span>
+                        <span class="setting-desc">Choose a headset microphone, or leave it automatic</span>
+                    </div>
+                    <select class="setting-select" id="micSelect" aria-label="Microphone">
+                        <option value="">Automatic</option>
+                    </select>
+                </div>
+
+                <!-- Jap counter button -->
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <span class="setting-name">Jap counter button</span>
+                        <span class="setting-desc">A large button to count each jap by hand</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="japCounterToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+
                 <!-- 5. AI Voice Sync learning + diagnostics -->
                 <div class="setting-item setting-item-stack">
                     <div class="setting-info">
@@ -373,6 +419,8 @@
     <script src="js/chalisa-meanings.js"></script>
     <script src="js/chalisa-data.js"></script>
     <script src="js/speech-matcher.js"></script>
+    <script src="js/offline-lexicon.js"></script>
+    <script src="js/offline-engine.js"></script>
     <script src="js/app.js"></script>
     <script>
       // Service worker only for the website. The APK already ships every file,

@@ -1,6 +1,6 @@
 // Shri Hanuman Chalisa - Offline Service Worker (website only; not registered in the APK)
 // Bump CACHE_NAME whenever a cached file changes so old caches are dropped on activate.
-const CACHE_NAME = 'hanuman-chalisa-v6';
+const CACHE_NAME = 'hanuman-chalisa-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,9 @@ const ASSETS = [
   './js/chalisa-meanings.js',
   './js/chalisa-data.js',
   './js/speech-matcher.js',
+  './js/offline-lexicon.js',
+  './js/offline-engine.js',
+  './vendor/vosk.js',
   './js/app.js',
   './manifest.json',
   './fonts/fonts.css',
@@ -47,6 +50,8 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET' || req.headers.has('range')) return;
   if (new URL(req.url).origin !== self.location.origin) return;
+  // The speech model (30 MB) is kept unpacked by the recogniser itself (IndexedDB): no second copy here.
+  if (new URL(req.url).pathname.includes('/models/')) return;
 
   // ignoreSearch: the page asks for style.css?v=5.0 but the cache key is ./style.css
   const cached = caches.match(req, { ignoreSearch: true });
